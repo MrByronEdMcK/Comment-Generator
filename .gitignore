@@ -1,4 +1,9 @@
-# Python cache and temporary files
+# Python and testing files
+*.py
+tests/
+test/
+*.csv
+*.xlsx
 __pycache__/
 *.py[cod]
 *$py.class
@@ -12,6 +17,7 @@ Thumbs.db
 *.swp
 *.bak
 
-# Chrome test profiles
+# Temporary test profiles and scratch files
 chrome_shot/
 tmp_shot/
+scratch/
