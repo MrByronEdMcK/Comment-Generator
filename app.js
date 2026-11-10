@@ -2465,7 +2465,7 @@ document.addEventListener('DOMContentLoaded', () => {
       `;
       return;
     }
-    const activeQuestions = state.questions.filter(q => !q.isSectionBreak && q.included);
+    const activeQuestions = state.questions.filter(q => !q.isSectionBreak && q.included !== false);
 
     studentsToRender.forEach(student => {
       // Calculate overall score (checks against sheet Total and Percentage if present)
@@ -2575,29 +2575,47 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.btn-regen-single').forEach(b => {
       b.addEventListener('click', () => {
         const id = b.getAttribute('data-id');
-        const student = state.students.find(s => s.id === id);
+        const student = state.students.find(s => String(s.id) === String(id));
         if (!student) return;
-
-        // Minimise generation settings upon generating
-        toggleGenerationConfigCard(false);
 
         b.innerHTML = '<span>Regenerating...</span>';
         b.disabled = true;
 
         const config = {
           ...state.generationConfig,
+          currentComment: state.generatedComments[id] || '',
           tone: 'formal and encouraging'
         };
 
-        const activeQuestions = state.questions.filter(q => !q.isSectionBreak && q.included);
+        const activeQuestions = state.questions.filter(q => !q.isSectionBreak && q.included !== false);
         try {
           const comment = CommentEngine.generateCommentsForStudent(student, activeQuestions, commentBank, config, state.sectionRanking);
           state.generatedComments[id] = comment;
-          renderStudentCards(state.students);
+
+          // Update student card comment textarea in place without destroying the DOM
+          const card = b.closest('.student-comment-card');
+          const txt = card ? card.querySelector('.student-comment-input') : document.querySelector(`.student-comment-input[data-id="${id}"]`);
+          if (txt) {
+            txt.value = comment;
+            autoResizeCommentTextarea(txt);
+            txt.style.transition = 'border-color 0.25s ease, box-shadow 0.25s ease';
+            txt.style.borderColor = 'var(--success)';
+            txt.style.boxShadow = '0 0 0 3px rgba(56, 115, 78, 0.25)';
+            setTimeout(() => {
+              txt.style.borderColor = '';
+              txt.style.boxShadow = '';
+            }, 1200);
+          }
+
           triggerAutoSave();
+
+          b.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"></path></svg> <span>Regenerated!</span>';
+          setTimeout(() => {
+            b.disabled = false;
+            b.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> <span>Regenerate</span>';
+          }, 1500);
         } catch (err) {
           console.error(`Single generation failed for ${student.name}:`, err);
-        } finally {
           b.disabled = false;
           b.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> <span>Regenerate</span>';
         }
@@ -2677,7 +2695,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressTimeElapsed = document.getElementById('progressTimeElapsed');
     const progressEstTime = document.getElementById('progressEstTime');
 
-    const activeQuestions = state.questions.filter(q => !q.isSectionBreak && q.included);
+    const activeQuestions = state.questions.filter(q => !q.isSectionBreak && q.included !== false);
     const config = {
       ...state.generationConfig,
       tone: 'formal and encouraging'
@@ -2762,7 +2780,7 @@ document.addEventListener('DOMContentLoaded', () => {
   btnExportExcel.addEventListener('click', () => {
     if (state.students.length === 0) return;
 
-    const activeQuestions = state.questions.filter(q => !q.isSectionBreak && q.included);
+    const activeQuestions = state.questions.filter(q => !q.isSectionBreak && q.included !== false);
 
     const exportRows = state.students.map(student => {
       const summary = CommentEngine.calculateStudentScoreSummary(student, state.questions);
@@ -3105,10 +3123,67 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  async function copyTextToClipboard(text) {
+    if (!text) return false;
+
+    const fallbackCopy = () => {
+      try {
+        if (compassScriptPreview && compassScriptPreview.value === text) {
+          compassScriptPreview.focus();
+          compassScriptPreview.select();
+          const ok = document.execCommand('copy');
+          if (ok) return true;
+        }
+
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '0';
+        ta.style.left = '0';
+        ta.style.width = '2em';
+        ta.style.height = '2em';
+        ta.style.padding = '0';
+        ta.style.border = 'none';
+        ta.style.outline = 'none';
+        ta.style.boxShadow = 'none';
+        ta.style.background = 'transparent';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, text.length);
+        const success = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return success;
+      } catch (err) {
+        console.warn('Fallback execCommand copy failed:', err);
+        return false;
+      }
+    };
+
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (err) {
+        console.warn('navigator.clipboard.writeText failed, using fallback execCommand:', err);
+        return fallbackCopy();
+      }
+    } else {
+      return fallbackCopy();
+    }
+  }
+
   function openCompassModal() {
     if (!compassModal) return;
     updateCompassModalPreview();
     compassModal.style.display = 'flex';
+    if (compassScriptPreview) {
+      setTimeout(() => {
+        compassScriptPreview.focus();
+        compassScriptPreview.select();
+      }, 50);
+    }
   }
 
   function closeCompassModal() {
@@ -3117,19 +3192,28 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (btnCopyCompassScript) {
-    btnCopyCompassScript.addEventListener('click', () => {
+    btnCopyCompassScript.addEventListener('click', async () => {
       if (state.students.length === 0) {
         alert('No students found to export. Please load or upload a gradebook first.');
         return;
       }
 
-      // Check if comments exist; offer to generate if none exist
+      // If no comments have been generated yet, automatically generate them now
       const generatedCount = Object.keys(state.generatedComments).length;
       if (generatedCount === 0) {
-        const doGen = confirm('No feedback comments have been generated yet.\n\nWould you like to generate comments now before creating your Compass script?');
-        if (doGen) {
-          runBatchGeneration(state.students);
-        }
+        const activeQuestions = state.questions.filter(q => !q.isSectionBreak && q.included !== false);
+        const config = { ...state.generationConfig, tone: 'formal and encouraging' };
+        state.students.forEach(student => {
+          state.generatedComments[student.id] = CommentEngine.generateCommentsForStudent(
+            student,
+            activeQuestions,
+            commentBank,
+            config,
+            state.sectionRanking
+          );
+        });
+        renderStudentCards(state.students);
+        triggerAutoSave();
       }
 
       const format = compassColumnFormat ? compassColumnFormat.value : 'band_ach_imp';
@@ -3140,10 +3224,11 @@ document.addEventListener('DOMContentLoaded', () => {
         format
       );
 
-      // Copy directly to clipboard
-      navigator.clipboard.writeText(script).catch(err => {
-        console.warn('Clipboard write error:', err);
-      });
+      // Open modal so user can view instructions, inspect code, or change column mapping
+      openCompassModal();
+
+      // Perform reliable copy to clipboard
+      copyTextToClipboard(script);
 
       // Visual feedback on button
       const origHTML = btnCopyCompassScript.innerHTML;
@@ -3151,9 +3236,6 @@ document.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
         btnCopyCompassScript.innerHTML = origHTML;
       }, 2000);
-
-      // Open modal so user can view instructions, inspect code, or change column mapping
-      openCompassModal();
     });
   }
 
@@ -3164,9 +3246,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (btnCopyCompassModalScript) {
-    btnCopyCompassModalScript.addEventListener('click', () => {
+    btnCopyCompassModalScript.addEventListener('click', async () => {
       const script = compassScriptPreview ? compassScriptPreview.value : '';
-      navigator.clipboard.writeText(script);
+      await copyTextToClipboard(script);
       const origHTML = btnCopyCompassModalScript.innerHTML;
       btnCopyCompassModalScript.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"></path></svg> <span>Copied!</span>';
       setTimeout(() => {

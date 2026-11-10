@@ -769,6 +769,19 @@ class CommentEngine {
       return arr;
     };
 
+    // Extract normalized sentences from currentComment if provided to avoid repeating the exact same comment on regenerate
+    const previousNorms = new Set();
+    if (config.currentComment && typeof config.currentComment === 'string') {
+      const prevLines = config.currentComment.split(/\r?\n+/);
+      prevLines.forEach(line => {
+        const cleaned = line.replace(/Achievements:\s*/gi, '').replace(/Improvements:\s*/gi, '').trim();
+        if (cleaned) {
+          const norm = CommentEngine.normalizeText(cleaned);
+          if (norm) previousNorms.add(norm);
+        }
+      });
+    }
+
     // 3. Staged Selection Following Section Priority Tiers (Equal priority sections pooled together)
     // Comments are selected at random from the possible/qualifying candidates for each student,
     // rather than always taking the first available comment.
@@ -799,8 +812,11 @@ class CommentEngine {
       const qCandidates = available.filter(i => i.isQuestion);
       const gCandidates = available.filter(i => !i.isQuestion);
 
-      // Select at random from question-specific possible comments first
-      const shuffledQ = shuffleArray(qCandidates);
+      // Prioritize candidates not previously used if regenerating, then shuffle
+      const unusedQ = qCandidates.filter(c => !previousNorms.has(CommentEngine.normalizeText(c.text)));
+      const usedQ = qCandidates.filter(c => previousNorms.has(CommentEngine.normalizeText(c.text)));
+      const shuffledQ = [...shuffleArray(unusedQ), ...shuffleArray(usedQ)];
+
       for (const item of shuffledQ) {
         if (selectedAch.length >= targetAch) break;
         const norm = CommentEngine.normalizeText(item.text);
@@ -808,9 +824,12 @@ class CommentEngine {
         selectedAch.push(item.text);
       }
 
-      // If more achievements are needed to reach target, select at random from general/section candidates
+      // If more achievements are needed to reach target, select from general/section candidates
       if (selectedAch.length < targetAch && gCandidates.length > 0) {
-        const shuffledG = shuffleArray(gCandidates);
+        const unusedG = gCandidates.filter(c => !previousNorms.has(CommentEngine.normalizeText(c.text)));
+        const usedG = gCandidates.filter(c => previousNorms.has(CommentEngine.normalizeText(c.text)));
+        const shuffledG = [...shuffleArray(unusedG), ...shuffleArray(usedG)];
+
         for (const item of shuffledG) {
           if (selectedAch.length >= targetAch) break;
           const norm = CommentEngine.normalizeText(item.text);
@@ -848,8 +867,11 @@ class CommentEngine {
       const qCandidates = available.filter(i => i.isQuestion);
       const gCandidates = available.filter(i => !i.isQuestion);
 
-      // Select at random from question-specific possible improvements first
-      const shuffledQ = shuffleArray(qCandidates);
+      // Prioritize candidates not previously used if regenerating, then shuffle
+      const unusedQ = qCandidates.filter(c => !previousNorms.has(CommentEngine.normalizeText(c.text)));
+      const usedQ = qCandidates.filter(c => previousNorms.has(CommentEngine.normalizeText(c.text)));
+      const shuffledQ = [...shuffleArray(unusedQ), ...shuffleArray(usedQ)];
+
       for (const item of shuffledQ) {
         if (selectedImp.length >= targetImp) break;
         const norm = CommentEngine.normalizeText(item.text);
@@ -857,9 +879,12 @@ class CommentEngine {
         selectedImp.push(item.text);
       }
 
-      // If more improvements are needed to reach target, select at random from general/section candidates
+      // If more improvements are needed to reach target, select from general/section candidates
       if (selectedImp.length < targetImp && gCandidates.length > 0) {
-        const shuffledG = shuffleArray(gCandidates);
+        const unusedG = gCandidates.filter(c => !previousNorms.has(CommentEngine.normalizeText(c.text)));
+        const usedG = gCandidates.filter(c => previousNorms.has(CommentEngine.normalizeText(c.text)));
+        const shuffledG = [...shuffleArray(unusedG), ...shuffleArray(usedG)];
+
         for (const item of shuffledG) {
           if (selectedImp.length >= targetImp) break;
           const norm = CommentEngine.normalizeText(item.text);
