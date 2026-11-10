@@ -1389,6 +1389,14 @@ document.addEventListener('DOMContentLoaded', () => {
   // Step 4 DOM
   const btnGenerateAll = document.getElementById('btnGenerateAll');
   const btnExportExcel = document.getElementById('btnExportExcel');
+  const btnCopyCompassScript = document.getElementById('btnCopyCompassScript');
+  const compassModal = document.getElementById('compassModal');
+  const btnCloseCompassModal = document.getElementById('btnCloseCompassModal');
+  const btnCancelCompassModal = document.getElementById('btnCancelCompassModal');
+  const btnCopyCompassModalScript = document.getElementById('btnCopyCompassModalScript');
+  const compassColumnFormat = document.getElementById('compassColumnFormat');
+  const compassScriptPreview = document.getElementById('compassScriptPreview');
+  const compassStudentCountBadge = document.getElementById('compassStudentCountBadge');
   const searchStudent = document.getElementById('searchStudent');
   const totalStudentsCount = document.getElementById('totalStudentsCount');
   const studentCardsContainer = document.getElementById('studentCardsContainer');
@@ -1399,8 +1407,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Back Buttons
   document.querySelectorAll('.btn-back').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const targetStep = parseInt(e.target.getAttribute('data-target'), 10);
+    btn.addEventListener('click', () => {
+      const targetStep = parseInt(btn.getAttribute('data-target'), 10);
       showStep(targetStep);
     });
   });
@@ -2054,8 +2062,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.querySelectorAll('.btn-move-sec-up').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const idx = parseInt(e.target.getAttribute('data-idx'), 10);
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-idx'), 10);
         if (idx > 0) {
           const item = state.questions.splice(idx, 1)[0];
           state.questions.splice(idx - 1, 0, item);
@@ -2067,8 +2075,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.querySelectorAll('.btn-move-sec-down').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const idx = parseInt(e.target.getAttribute('data-idx'), 10);
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-idx'), 10);
         if (idx < state.questions.length - 1) {
           const item = state.questions.splice(idx, 1)[0];
           state.questions.splice(idx + 1, 0, item);
@@ -2080,8 +2088,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.querySelectorAll('.btn-del-sec').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const idx = parseInt(e.target.getAttribute('data-idx'), 10);
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-idx'), 10);
         state.questions.splice(idx, 1);
         recalculateQuestionIdsBySection();
         renderStep2Questions();
@@ -2145,8 +2153,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.querySelectorAll('.btn-del-q').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const idx = parseInt(e.target.getAttribute('data-idx'), 10);
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.getAttribute('data-idx'), 10);
         state.questions.splice(idx, 1);
         recalculateQuestionIdsBySection();
         renderStep2Questions();
@@ -2288,15 +2296,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.querySelectorAll('.btn-del-ach').forEach(b => {
-      b.addEventListener('click', (e) => {
-        commentBank.deleteAchievement(e.target.getAttribute('data-id'));
+      b.addEventListener('click', () => {
+        commentBank.deleteAchievement(b.getAttribute('data-id'));
         renderStep3CommentBank();
       });
     });
 
     document.querySelectorAll('.btn-del-imp').forEach(b => {
-      b.addEventListener('click', (e) => {
-        commentBank.deleteImprovement(e.target.getAttribute('data-id'));
+      b.addEventListener('click', () => {
+        commentBank.deleteImprovement(b.getAttribute('data-id'));
         renderStep3CommentBank();
       });
     });
@@ -2526,13 +2534,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.student-comment-input').forEach(txt => {
       autoResizeCommentTextarea(txt);
 
-      txt.addEventListener('input', (e) => {
-        autoResizeCommentTextarea(e.target);
+      txt.addEventListener('input', () => {
+        autoResizeCommentTextarea(txt);
       });
 
-      txt.addEventListener('change', (e) => {
-        const id = e.target.getAttribute('data-id');
-        state.generatedComments[id] = e.target.value;
+      txt.addEventListener('change', () => {
+        const id = txt.getAttribute('data-id');
+        state.generatedComments[id] = txt.value;
         triggerAutoSave();
       });
     });
@@ -2540,8 +2548,8 @@ document.addEventListener('DOMContentLoaded', () => {
     requestAnimationFrame(() => autoResizeAllCommentBoxes());
 
     document.querySelectorAll('.btn-copy-comment').forEach(b => {
-      b.addEventListener('click', (e) => {
-        const id = e.target.getAttribute('data-id');
+      b.addEventListener('click', () => {
+        const id = b.getAttribute('data-id');
         const text = state.generatedComments[id] || '';
         navigator.clipboard.writeText(text);
         b.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"></path></svg> <span>Copied</span>';
@@ -2552,8 +2560,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.querySelectorAll('.btn-clear-single').forEach(b => {
-      b.addEventListener('click', (e) => {
-        const id = e.target.getAttribute('data-id');
+      b.addEventListener('click', () => {
+        const id = b.getAttribute('data-id');
         delete state.generatedComments[id];
         const txt = document.querySelector(`.student-comment-input[data-id="${id}"]`);
         if (txt) {
@@ -2565,8 +2573,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.querySelectorAll('.btn-regen-single').forEach(b => {
-      b.addEventListener('click', (e) => {
-        const id = e.target.getAttribute('data-id');
+      b.addEventListener('click', () => {
+        const id = b.getAttribute('data-id');
         const student = state.students.find(s => s.id === id);
         if (!student) return;
 
@@ -2782,5 +2790,409 @@ document.addEventListener('DOMContentLoaded', () => {
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Student Feedback Comments');
 
     XLSX.writeFile(workbook, 'Student_Assessment_Comments.xlsx');
+  });
+
+  // --- Compass Console Command Generator ---
+  function extractFeedbackSections(rawText) {
+    if (!rawText) return { achievements: '', improvements: '', full: '' };
+    const text = rawText.trim();
+
+    const achMatch = text.match(/Achievements:\s*([\s\S]*?)(?=(?:Improvements:|$))/i);
+    const impMatch = text.match(/Improvements:\s*([\s\S]*?)$/i);
+
+    let achievements = achMatch ? achMatch[1].trim() : '';
+    let improvements = impMatch ? impMatch[1].trim() : '';
+
+    if (!achMatch && !impMatch) {
+      achievements = text;
+      improvements = '';
+    }
+
+    if (achievements.toLowerCase().includes('(none qualified from bank)')) {
+      achievements = '';
+    }
+    if (improvements.toLowerCase().includes('(none qualified from bank)')) {
+      improvements = '';
+    }
+
+    achievements = achievements.replace(/\r?\n+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    improvements = improvements.replace(/\r?\n+/g, ' ').replace(/\s{2,}/g, ' ').trim();
+    const full = text
+      .replace(/Achievements:\s*/gi, '')
+      .replace(/Improvements:\s*/gi, '')
+      .replace(/\(None qualified from bank\)/gi, '')
+      .replace(/\r?\n+/g, ' ')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
+    return { achievements, improvements, full };
+  }
+
+  function generateCompassScript(students, questions, generatedComments, format = 'band_ach_imp') {
+    const activeQuestions = (questions || []).filter(q => !q.isSectionBreak && q.included !== false);
+
+    const rows = (students || []).map(student => {
+      const summary = CommentEngine.calculateStudentScoreSummary(student, activeQuestions);
+      const band = summary.isZeroOutOfZero ? 'Incomplete' : (summary.band || '');
+      const commentText = generatedComments[student.id] || '';
+
+      const { achievements, improvements, full } = extractFeedbackSections(commentText);
+
+      let fields = [];
+      if (format === 'band_ach_imp') {
+        fields = [band, achievements, improvements];
+      } else if (format === 'ach_imp') {
+        fields = [achievements, improvements];
+      } else if (format === 'band_full') {
+        fields = [band, full];
+      } else if (format === 'full_only') {
+        fields = [full];
+      } else if (format === 'band_only') {
+        fields = [band];
+      } else {
+        fields = [band, achievements, improvements];
+      }
+
+      const cleanName = (student.name || '').replace(/[\t\r\n]+/g, ' ').trim();
+      const cleanFields = fields.map(f => (f || '').replace(/[\t\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim());
+
+      return [cleanName, ...cleanFields].join('\t');
+    });
+
+    const rawDataText = rows.join('\n');
+
+    const escapedRawData = rawDataText
+      .replace(/\\/g, '\\\\')
+      .replace(/`/g, '\\`')
+      .replace(/\${/g, '\\${');
+
+    return `(async function() {
+    // 1. YOUR RAW DATA
+    // Generated by Comment Generator for Compass Gradebook Automation
+    const rawData = \`${escapedRawData}\`;
+
+    if (!rawData.trim()) {
+        alert("🛑 ERROR: Raw data is empty. Please check your data.");
+        return;
+    }
+
+    // 2. PARSE DATA WITH VALIDATION
+    const studentsData = rawData.trim().split('\\n').reduce((acc, row, index) => {
+        const cols = row.split('\\t').map(cell => cell.trim());
+        if (cols.length < 2 || !cols[0]) {
+            console.warn(\`⚠️ Warning: Row \${index + 1} in raw data is missing a name or fields. Skipping: "\${row}"\`);
+            return acc;
+        }
+        acc.push({
+            originalName: cols[0],
+            name: cols[0].toLowerCase(),
+            fields: cols.slice(1),
+            processed: false // Track if we actually find them in the grid
+        });
+        return acc;
+    }, []);
+
+    // 3. FIND VISIBLE COLUMNS
+    const gridHeaders = Array.from(document.querySelectorAll('.ag-header-cell'))
+        .map(cell => ({
+            name: cell.innerText.trim(),
+            id: cell.getAttribute('col-id')
+        }))
+        .filter(col => col.id && col.id !== 'Name' && col.name);
+
+    const taskIds = [...new Set(gridHeaders.map(col => {
+        return col.id.includes(':') ? col.id.split(':')[0] : null;
+    }).filter(id => id))];
+
+    if (taskIds.length !== 1) {
+        const msg = "🛑 ERROR: Please ensure exactly ONE task is visible on screen.";
+        console.error(msg);
+        alert(msg);
+        return;
+    }
+
+    const activeTaskId = taskIds[0];
+    const taskColumns = gridHeaders.filter(col => col.id.startsWith(activeTaskId + ':'));
+    console.log(\`✅ Single Task (\${activeTaskId}) confirmed. Found \${taskColumns.length} columns to fill.\`);
+
+    // 4. HYBRID AUTOMATION EDITOR
+    async function editCell(cell, value, colName, studentName) {
+        if (!cell) {
+            console.warn(\`⚠️ Cell for [\${colName}] not found in DOM for \${studentName}.\`);
+            return;
+        }
+        if (value === undefined || value === '') return;
+        
+        // --- SKIP CHECK ---
+        const existingText = (cell.innerText || cell.textContent || "").trim();
+        const cleanValue = value.replace(/\\\\n/g, '\\n').trim();
+        
+        // If the cell already has this exact data (ignoring case), skip it instantly!
+        if (existingText.toLowerCase() === cleanValue.toLowerCase()) {
+            console.log(\`⏩ Skipping [\${colName}] for \${studentName} - Data already matches ("\${value}").\`);
+            return;
+        }
+        
+        cell.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        await new Promise(r => setTimeout(r, 150)); 
+        
+        console.log(\`🖱️ Clicking [\${colName}] for \${studentName}...\`);
+        
+        // Trigger cell edit
+        cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+        cell.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+        cell.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+        cell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window }));
+        
+        await new Promise(r => setTimeout(r, 400)); // Give UI time to render modal/input
+        
+        const textareas = Array.from(document.querySelectorAll('textarea')).filter(ta => ta.getBoundingClientRect().width > 0);
+        const modalInput = textareas[textareas.length - 1]; 
+        
+        if (modalInput) {
+            console.log(\`📝 Modal detected. Injecting text...\`);
+            modalInput.focus();
+            modalInput.value = cleanValue;
+            modalInput.dispatchEvent(new Event('input', { bubbles: true }));
+            modalInput.dispatchEvent(new Event('change', { bubbles: true }));
+            
+            await new Promise(r => setTimeout(r, 200));
+            
+            const buttons = Array.from(document.querySelectorAll('button, .x-btn, a[role="button"], span.x-btn-inner'))
+                .filter(btn => btn.innerText.toLowerCase().includes('save') && btn.getBoundingClientRect().width > 0);
+                
+            const saveCloseBtn = buttons.find(b => b.innerText.toLowerCase().includes('close')) || buttons[buttons.length - 1];
+            
+            if (saveCloseBtn) {
+                const clickable = saveCloseBtn.closest('a, button, .x-btn') || saveCloseBtn;
+                clickable.click();
+                clickable.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+                clickable.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+            }
+            
+            await new Promise(r => setTimeout(r, 600)); // Wait for modal to close
+            
+            // Safety measure
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+            await new Promise(r => setTimeout(r, 100));
+
+        } else {
+            // INLINE EDITOR (Grade Cells / Dropdowns)
+            let inlineInput = cell.querySelector('input');
+            if (!inlineInput || inlineInput.type === 'hidden') inlineInput = document.activeElement;
+            
+            if (inlineInput && inlineInput.tagName === 'INPUT' && inlineInput.type !== 'hidden') {
+                console.log(\`✏️ Inline input detected. Injecting "\${value}"...\`);
+                inlineInput.focus();
+                
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+                if (nativeInputValueSetter) nativeInputValueSetter.call(inlineInput, value);
+                else inlineInput.value = value;
+                
+                inlineInput.dispatchEvent(new Event('input', { bubbles: true }));
+                inlineInput.dispatchEvent(new Event('change', { bubbles: true }));
+                
+                // Wake up dropdown
+                for (let i = 0; i < value.length; i++) {
+                    const char = value[i];
+                    inlineInput.dispatchEvent(new KeyboardEvent('keydown', { key: char, bubbles: true }));
+                    inlineInput.dispatchEvent(new KeyboardEvent('keyup', { key: char, bubbles: true }));
+                }
+                
+                await new Promise(r => setTimeout(r, 300));
+                
+                const dropdownItems = Array.from(document.querySelectorAll('.x-boundlist-item, .ag-rich-select-row, li.x-list-item, .ag-select-list-item, .ag-virtual-list-item'));
+                const matchingItem = dropdownItems.find(item => item.innerText.trim().toLowerCase() === value.toLowerCase());
+                
+                if (matchingItem) {
+                    matchingItem.click();
+                    matchingItem.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+                    matchingItem.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                }
+                
+                inlineInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                inlineInput.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                inlineInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', keyCode: 9, bubbles: true }));
+                
+                await new Promise(r => setTimeout(r, 300));
+            } else {
+                console.warn(\`⚠️ Failed to open editor for [\${colName}]. Cell might be read-only.\`);
+            }
+        }
+    }
+
+    // 5. RUN THE LOOP
+    const nameCells = Array.from(document.querySelectorAll('.ag-cell[col-id="Name"]'))
+        .filter(cell => cell.closest('.ag-row:not(.ag-hidden)'));
+        
+    let updatedCount = 0;
+    
+    for (let nameCell of nameCells) {
+        const gridName = nameCell.innerText.trim().toLowerCase();
+        
+        // Find matching student in our data (supports "First Last", "Last, First", or partial token matching)
+        const student = studentsData.find(s => {
+            if (gridName.includes(s.name) || s.name.includes(gridName)) return true;
+            const parts = s.name.split(/\\s+/);
+            if (parts.length >= 2) {
+                const reversed = \`\${parts[parts.length - 1]}, \${parts.slice(0, -1).join(' ')}\`;
+                const reversedNoComma = \`\${parts[parts.length - 1]} \${parts.slice(0, -1).join(' ')}\`;
+                if (gridName.includes(reversed) || gridName.includes(reversedNoComma)) return true;
+            }
+            const tokens = s.name.replace(/[^a-z0-9\\s]/g, '').split(/\\s+/).filter(t => t.length > 1);
+            if (tokens.length >= 2 && tokens.every(t => gridName.includes(t))) return true;
+            return false;
+        });
+        
+        if (student) {
+            console.log(\`\\n👨🎓 Processing: \${gridName}...\`);
+            student.processed = true; // Mark as successfully found
+            
+            const rowElement = nameCell.closest('.ag-row');
+            const rowIndex = rowElement.getAttribute('row-index');
+            
+            if (rowIndex === null) {
+                console.warn(\`⚠️ Could not find row-index for \${gridName}. Skipping.\`);
+                continue;
+            }
+            
+            for (let i = 0; i < taskColumns.length; i++) {
+                if (student.fields[i]) {
+                    const targetCell = document.querySelector(\`.ag-row[row-index="\${rowIndex}"] .ag-cell[col-id="\${taskColumns[i].id}"]\`);
+                    await editCell(targetCell, student.fields[i], taskColumns[i].name, gridName);
+                }
+            }
+            updatedCount++;
+        }
+    }
+    
+    // 6. FINAL FEEDBACK & SUMMARY
+    const missingStudents = studentsData.filter(s => !s.processed);
+    
+    console.log(\`\\n========================================\`);
+    console.log(\`🎉 Script finished. Processed \${updatedCount} students.\`);
+    
+    let alertMsg = \`✅ Script finished!\\n\\nProcessed: \${updatedCount} students in the grid.\`;
+    
+    if (missingStudents.length > 0) {
+        console.warn(\`⚠️ The following \${missingStudents.length} students from your data were NOT found on the screen:\`);
+        missingStudents.forEach(s => console.warn(\`- \${s.originalName}\`));
+        
+        alertMsg += \`\\n\\n⚠️ WARNING: \${missingStudents.length} students from your data were NOT found on screen.\\nCheck the browser console for their names.\`;
+    } else {
+        console.log(\`✅ All students in your raw data were successfully found on screen!\`);
+    }
+    console.log(\`========================================\\n\`);
+    
+    alert(alertMsg);
+})();`;
+  }
+
+  function updateCompassModalPreview() {
+    const format = compassColumnFormat ? compassColumnFormat.value : 'band_ach_imp';
+    const script = generateCompassScript(
+      state.students,
+      state.questions,
+      state.generatedComments,
+      format
+    );
+    if (compassScriptPreview) {
+      compassScriptPreview.value = script;
+    }
+    if (compassStudentCountBadge) {
+      const count = state.students.length;
+      compassStudentCountBadge.textContent = `${count} student${count === 1 ? '' : 's'} included`;
+    }
+  }
+
+  function openCompassModal() {
+    if (!compassModal) return;
+    updateCompassModalPreview();
+    compassModal.style.display = 'flex';
+  }
+
+  function closeCompassModal() {
+    if (!compassModal) return;
+    compassModal.style.display = 'none';
+  }
+
+  if (btnCopyCompassScript) {
+    btnCopyCompassScript.addEventListener('click', () => {
+      if (state.students.length === 0) {
+        alert('No students found to export. Please load or upload a gradebook first.');
+        return;
+      }
+
+      // Check if comments exist; offer to generate if none exist
+      const generatedCount = Object.keys(state.generatedComments).length;
+      if (generatedCount === 0) {
+        const doGen = confirm('No feedback comments have been generated yet.\n\nWould you like to generate comments now before creating your Compass script?');
+        if (doGen) {
+          runBatchGeneration(state.students);
+        }
+      }
+
+      const format = compassColumnFormat ? compassColumnFormat.value : 'band_ach_imp';
+      const script = generateCompassScript(
+        state.students,
+        state.questions,
+        state.generatedComments,
+        format
+      );
+
+      // Copy directly to clipboard
+      navigator.clipboard.writeText(script).catch(err => {
+        console.warn('Clipboard write error:', err);
+      });
+
+      // Visual feedback on button
+      const origHTML = btnCopyCompassScript.innerHTML;
+      btnCopyCompassScript.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"></path></svg> <span>Copied Compass Script!</span>';
+      setTimeout(() => {
+        btnCopyCompassScript.innerHTML = origHTML;
+      }, 2000);
+
+      // Open modal so user can view instructions, inspect code, or change column mapping
+      openCompassModal();
+    });
+  }
+
+  if (compassColumnFormat) {
+    compassColumnFormat.addEventListener('change', () => {
+      updateCompassModalPreview();
+    });
+  }
+
+  if (btnCopyCompassModalScript) {
+    btnCopyCompassModalScript.addEventListener('click', () => {
+      const script = compassScriptPreview ? compassScriptPreview.value : '';
+      navigator.clipboard.writeText(script);
+      const origHTML = btnCopyCompassModalScript.innerHTML;
+      btnCopyCompassModalScript.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"></path></svg> <span>Copied!</span>';
+      setTimeout(() => {
+        btnCopyCompassModalScript.innerHTML = origHTML;
+      }, 2000);
+    });
+  }
+
+  if (btnCloseCompassModal) {
+    btnCloseCompassModal.addEventListener('click', closeCompassModal);
+  }
+
+  if (btnCancelCompassModal) {
+    btnCancelCompassModal.addEventListener('click', closeCompassModal);
+  }
+
+  if (compassModal) {
+    compassModal.addEventListener('click', (e) => {
+      if (e.target === compassModal) closeCompassModal();
+    });
+  }
+
+  // Keyboard shortcut: close modal on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && compassModal && compassModal.style.display !== 'none') {
+      closeCompassModal();
+    }
   });
 });

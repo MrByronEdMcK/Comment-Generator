@@ -298,6 +298,12 @@
               <button id="btnExportExcel" class="btn btn-secondary">
                 Export to Excel (.xlsx)
               </button>
+              <button id="btnCopyCompassScript" class="btn btn-secondary" title="Generate and copy automated console command for Compass">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                </svg>
+                <span>Copy Compass Script</span>
+              </button>
             </div>
           </div>
 
@@ -591,6 +597,54 @@
       <div class="modal-footer">
         <button id="btnCancelBulk" class="btn btn-secondary btn-sm">Cancel</button>
         <button id="btnSubmitBulk" class="btn btn-primary btn-sm">Import Comments</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compass Automation Script Modal -->
+  <div id="compassModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="width: min(92vw, 760px);">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <h3 class="modal-title">Compass Console Command Generator</h3>
+          <span class="tag-pill" style="background: var(--success-light); color: var(--success-text); border: 1px solid rgba(56, 115, 78, 0.3); font-weight: 600;">Automated</span>
+        </div>
+        <button id="btnCloseCompassModal" class="btn-close" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.75rem;">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">Column Mapping:</label>
+            <select id="compassColumnFormat" style="max-width: 340px; font-size: 0.85rem;">
+              <option value="band_ach_imp">Grade Band, Achievements, Improvements (3 cols)</option>
+              <option value="ach_imp">Achievements, Improvements (2 cols)</option>
+              <option value="band_full">Grade Band, Full Comment (2 cols)</option>
+              <option value="full_only">Full Comment Only (1 col)</option>
+              <option value="band_only">Grade Band Only (1 col)</option>
+            </select>
+          </div>
+          <div id="compassStudentCountBadge" style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600;">
+            0 students included
+          </div>
+        </div>
+
+        <div style="background: var(--bg-surface-hover); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.75rem 0.9rem; margin-bottom: 0.85rem; font-size: 0.82rem; line-height: 1.5;">
+          <strong>How to run in Compass:</strong>
+          <ol style="margin: 0.35rem 0 0 1.25rem; padding: 0;">
+            <li>Open your Compass Learning Task Gradebook in Chrome or Edge and ensure <strong>only this single task</strong> is visible.</li>
+            <li>Press <strong>F12</strong> (or right-click &gt; <em>Inspect</em>) to open Developer Tools, then click the <strong>Console</strong> tab.</li>
+            <li>Paste (<strong>Ctrl + V</strong>) the command below and press <strong>Enter</strong> to automatically fill marks and comments.</li>
+          </ol>
+        </div>
+
+        <textarea id="compassScriptPreview" class="comment-textarea code-preview-box" readonly style="min-height: 220px; font-family: monospace; font-size: 0.8rem; background: var(--bg-surface); white-space: pre; line-height: 1.4;"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button id="btnCancelCompassModal" class="btn btn-secondary btn-sm">Close</button>
+        <button id="btnCopyCompassModalScript" class="btn btn-primary btn-sm">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path></svg>
+          <span>Copy to Clipboard</span>
+        </button>
       </div>
     </div>
   </div>
