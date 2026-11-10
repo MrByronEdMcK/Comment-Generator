@@ -2833,15 +2833,47 @@ document.addEventListener('DOMContentLoaded', () => {
       improvements = '';
     }
 
-    achievements = achievements.replace(/\r?\n+/g, ' ').replace(/\s{2,}/g, ' ').trim();
-    improvements = improvements.replace(/\r?\n+/g, ' ').replace(/\s{2,}/g, ' ').trim();
-    const full = text
+    function formatSectionSentences(raw) {
+      if (!raw || !raw.trim()) return '';
+
+      const rawLines = raw.split(/\r?\n+/).map(l => l.trim()).filter(Boolean);
+      const validLines = rawLines.filter(l => 
+        !/^achievements:\s*$/i.test(l) &&
+        !/^improvements:\s*$/i.test(l) &&
+        !/\(none qualified from bank\)/i.test(l)
+      );
+
+      let sentences = [];
+      if (validLines.length > 1) {
+        sentences = validLines;
+      } else if (validLines.length === 1) {
+        const single = validLines[0];
+        const matched = single.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g);
+        if (matched && matched.length > 1) {
+          sentences = matched.map(s => s.trim()).filter(Boolean);
+        } else {
+          sentences = [single];
+        }
+      }
+
+      return sentences
+        .map(s => {
+          const cleaned = s.replace(/\s+/g, ' ').trim();
+          return /[.!?]$/.test(cleaned) ? cleaned : cleaned + '.';
+        })
+        .filter(Boolean)
+        .join('\n');
+    }
+
+    achievements = formatSectionSentences(achievements);
+    improvements = formatSectionSentences(improvements);
+
+    const fullRaw = text
       .replace(/Achievements:\s*/gi, '')
       .replace(/Improvements:\s*/gi, '')
       .replace(/\(None qualified from bank\)/gi, '')
-      .replace(/\r?\n+/g, ' ')
-      .replace(/\s{2,}/g, ' ')
       .trim();
+    const full = formatSectionSentences(fullRaw);
 
     return { achievements, improvements, full };
   }
@@ -2872,7 +2904,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const cleanName = (student.name || '').replace(/[\t\r\n]+/g, ' ').trim();
-      const cleanFields = fields.map(f => (f || '').replace(/[\t\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim());
+      const cleanFields = fields.map(f => {
+        if (!f) return '';
+        const s = f.replace(/[\t\r]+/g, ' ').trim();
+        return s.replace(/\n+/g, '__COMPASS_NL__');
+      });
 
       return [cleanName, ...cleanFields].join('\t');
     });
@@ -2882,7 +2918,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const escapedRawData = rawDataText
       .replace(/\\/g, '\\\\')
       .replace(/`/g, '\\`')
-      .replace(/\${/g, '\\${');
+      .replace(/\${/g, '\\${')
+      .replace(/__COMPASS_NL__/g, '\\n');
 
     return `(async function() {
     // 1. YOUR RAW DATA
@@ -2904,7 +2941,7 @@ document.addEventListener('DOMContentLoaded', () => {
         acc.push({
             originalName: cols[0],
             name: cols[0].toLowerCase(),
-            fields: cols.slice(1),
+            fields: cols.slice(1).map(f => f.replace(/\\\\n/g, '\\n')),
             processed: false // Track if we actually find them in the grid
         });
         return acc;
