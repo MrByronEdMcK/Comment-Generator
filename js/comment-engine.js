@@ -455,13 +455,24 @@ class CommentEngine {
   }
 
   /**
-   * Compute dynamic sentence distribution based on percentage and config (with customizable thresholds)
+   * Compute dynamic sentence distribution based on percentage and config.
+   * By default (enableScoreTiers = false): all students receive uniform comments (default: 3)
+   * with no score-differentiated tier differences.
+   * When enabled (enableScoreTiers = true): uses performance tiers and customizable thresholds.
    */
   static getTargetDistribution(pct, config = {}) {
+    if (config.enableScoreTiers === false) {
+      // By default: uniform comment count with no difference for higher/mid/lower scores
+      const total = parseInt(config.totalComments, 10) || 3;
+      const targetAch = Math.max(1, Math.ceil(total / 2));
+      const targetImp = Math.max(1, total - targetAch);
+      return { targetAch, targetImp, total: targetAch + targetImp };
+    }
+
     const total = parseInt(config.totalComments, 10) || 6;
-    const minAch = parseInt(config.minAchievements, 10) !== undefined ? parseInt(config.minAchievements, 10) : 2;
+    const minAch = parseInt(config.minAchievements, 10) !== undefined ? parseInt(config.minAchievements, 10) : 1;
     const maxAch = parseInt(config.maxAchievements, 10) !== undefined ? parseInt(config.maxAchievements, 10) : 4;
-    const minImp = parseInt(config.minImprovements, 10) !== undefined ? parseInt(config.minImprovements, 10) : 2;
+    const minImp = parseInt(config.minImprovements, 10) !== undefined ? parseInt(config.minImprovements, 10) : 1;
     const maxImp = parseInt(config.maxImprovements, 10) !== undefined ? parseInt(config.maxImprovements, 10) : 4;
 
     const highThreshold = config.highThreshold !== undefined && !isNaN(parseInt(config.highThreshold, 10))
@@ -488,10 +499,11 @@ class CommentEngine {
 
   /**
    * Helper: Normalize section priority ranking into tiers (Array<Array<string>>).
+   * By default: places all sections in a single row/tier (equal preference).
    * Supports:
-   * - Tiered arrays: [['SAQ'], ['MCQ', 'Extended Response'], ['General']]
+   * - Tiered arrays: [['SAQ', 'MCQ'], ['General']]
    * - Flat string arrays: ['SAQ', 'MCQ', 'General']
-   * - Equality-joined strings: ['SAQ', 'MCQ = Extended Response', 'General']
+   * - Equality-joined strings: ['SAQ = MCQ', 'General']
    */
   static normalizeSectionTiers(sectionRanking = [], validSections = []) {
     const tiers = [];
@@ -507,19 +519,35 @@ class CommentEngine {
       });
     }
 
+    // If no existing tiers configured, put all sections in a single row/tier by default!
+    if (tiers.length === 0) {
+      const all = [];
+      (validSections || []).forEach(sec => {
+        const s = String(sec).trim();
+        if (s && !all.includes(s)) all.push(s);
+      });
+      if (!all.includes('General')) all.push('General');
+      return [all];
+    }
+
     const placedSections = new Set();
     tiers.forEach(tier => tier.forEach(sec => placedSections.add(sec)));
 
     (validSections || []).forEach(sec => {
       const s = String(sec).trim();
       if (s && s !== 'General' && !placedSections.has(s)) {
-        tiers.push([s]);
+        if (tiers[0]) tiers[0].push(s);
+        else tiers.push([s]);
         placedSections.add(s);
       }
     });
 
     if (!placedSections.has('General')) {
-      tiers.push(['General']);
+      if (tiers.length === 1) {
+        tiers[0].push('General');
+      } else {
+        tiers.push(['General']);
+      }
       placedSections.add('General');
     }
 
@@ -728,7 +756,19 @@ class CommentEngine {
       }
     });
 
+    // Helper: Fisher-Yates array shuffle for random sampling
+    const shuffleArray = (array) => {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    };
+
     // 3. Staged Selection Following Section Priority Tiers (Equal priority sections pooled together)
+    // Comments are selected at random from the possible/qualifying candidates for each student,
+    // rather than always taking the first available comment.
     const selectedAch = [];
     const seenAchNorms = new Set();
 
@@ -741,18 +781,40 @@ class CommentEngine {
         }
       });
 
-      // Sort candidate items in this tier: question-specific first, then highest mastery percentage
-      pool.sort((a, b) => {
-        if (a.isQuestion !== b.isQuestion) return a.isQuestion ? -1 : 1;
-        return b.pct - a.pct;
-      });
-
+      // Filter to unique candidate items not yet selected
+      const available = [];
+      const localSeen = new Set();
       for (const item of pool) {
+        const norm = CommentEngine.normalizeText(item.text);
+        if (norm && !seenAchNorms.has(norm) && !localSeen.has(norm)) {
+          localSeen.add(norm);
+          available.push(item);
+        }
+      }
+
+      // Group into question-specific and general/section candidate pools
+      const qCandidates = available.filter(i => i.isQuestion);
+      const gCandidates = available.filter(i => !i.isQuestion);
+
+      // Select at random from question-specific possible comments first
+      const shuffledQ = shuffleArray(qCandidates);
+      for (const item of shuffledQ) {
         if (selectedAch.length >= targetAch) break;
         const norm = CommentEngine.normalizeText(item.text);
-        if (!seenAchNorms.has(norm)) {
-          seenAchNorms.add(norm);
-          selectedAch.push(item.text);
+        seenAchNorms.add(norm);
+        selectedAch.push(item.text);
+      }
+
+      // If more achievements are needed to reach target, select at random from general/section candidates
+      if (selectedAch.length < targetAch && gCandidates.length > 0) {
+        const shuffledG = shuffleArray(gCandidates);
+        for (const item of shuffledG) {
+          if (selectedAch.length >= targetAch) break;
+          const norm = CommentEngine.normalizeText(item.text);
+          if (!seenAchNorms.has(norm)) {
+            seenAchNorms.add(norm);
+            selectedAch.push(item.text);
+          }
         }
       }
     }
@@ -769,19 +831,39 @@ class CommentEngine {
         }
       });
 
-      // Sort candidate items in this tier: question-specific first, then lowest mastery percentage
-      pool.sort((a, b) => {
-        if (a.isQuestion !== b.isQuestion) return a.isQuestion ? -1 : 1;
-        return a.pct - b.pct;
-      });
-
+      // Filter to unique candidate items not yet selected and not contradicting achievements
+      const available = [];
+      const localSeen = new Set();
       for (const item of pool) {
+        const norm = CommentEngine.normalizeText(item.text);
+        if (norm && !seenImpNorms.has(norm) && !seenAchNorms.has(norm) && !localSeen.has(norm)) {
+          localSeen.add(norm);
+          available.push(item);
+        }
+      }
+
+      const qCandidates = available.filter(i => i.isQuestion);
+      const gCandidates = available.filter(i => !i.isQuestion);
+
+      // Select at random from question-specific possible improvements first
+      const shuffledQ = shuffleArray(qCandidates);
+      for (const item of shuffledQ) {
         if (selectedImp.length >= targetImp) break;
         const norm = CommentEngine.normalizeText(item.text);
-        // Prevent duplicate improvements and anti-contradiction with selected achievements
-        if (!seenImpNorms.has(norm) && !seenAchNorms.has(norm)) {
-          seenImpNorms.add(norm);
-          selectedImp.push(item.text);
+        seenImpNorms.add(norm);
+        selectedImp.push(item.text);
+      }
+
+      // If more improvements are needed to reach target, select at random from general/section candidates
+      if (selectedImp.length < targetImp && gCandidates.length > 0) {
+        const shuffledG = shuffleArray(gCandidates);
+        for (const item of shuffledG) {
+          if (selectedImp.length >= targetImp) break;
+          const norm = CommentEngine.normalizeText(item.text);
+          if (!seenImpNorms.has(norm) && !seenAchNorms.has(norm)) {
+            seenImpNorms.add(norm);
+            selectedImp.push(item.text);
+          }
         }
       }
     }

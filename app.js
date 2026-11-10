@@ -207,11 +207,12 @@ document.addEventListener('DOMContentLoaded', () => {
     state.generatedComments = assessment.generatedComments ? { ...assessment.generatedComments } : {};
     state.sectionRanking = Array.isArray(assessment.sectionRanking) ? [...assessment.sectionRanking] : [];
     state.generationConfig = {
-      totalComments: 6,
-      minAchievements: 2,
-      maxAchievements: 4,
-      minImprovements: 2,
-      maxImprovements: 4,
+      totalComments: 3,
+      enableScoreTiers: false,
+      minAchievements: 1,
+      maxAchievements: 3,
+      minImprovements: 1,
+      maxImprovements: 2,
       highThreshold: 70,
       midThreshold: 50,
       ...(assessment.generationConfig || {})
@@ -255,6 +256,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnToggleConfigCard = document.getElementById('btnToggleConfigCard');
   const configSummaryBadge = document.getElementById('configSummaryBadge');
   const cfgTotalComments = document.getElementById('cfgTotalComments');
+  const cfgEnableScoreTiers = document.getElementById('cfgEnableScoreTiers');
+  const cfgScoreTiersStatusBadge = document.getElementById('cfgScoreTiersStatusBadge');
+  const advancedScoreSettingsContainer = document.getElementById('advancedScoreSettingsContainer');
   const cfgMinAch = document.getElementById('cfgMinAch');
   const cfgMaxAch = document.getElementById('cfgMaxAch');
   const cfgMinImp = document.getElementById('cfgMinImp');
@@ -269,14 +273,23 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateConfigSummaryBadge() {
     if (!configSummaryBadge) return;
     const cfg = state.generationConfig || {};
-    const total = cfg.totalComments ?? 6;
-    const minAch = cfg.minAchievements ?? 2;
-    const maxAch = cfg.maxAchievements ?? 4;
-    const minImp = cfg.minImprovements ?? 2;
-    const maxImp = cfg.maxImprovements ?? 4;
+    const total = cfg.totalComments ?? 3;
+    const isScoreTiers = cfg.enableScoreTiers === true;
+
+    if (!isScoreTiers) {
+      const ach = Math.max(1, Math.ceil(total / 2));
+      const imp = Math.max(1, total - ach);
+      configSummaryBadge.textContent = `${total} Comments per student (${ach} Str, ${imp} Gro) • Uniform Allocation`;
+      return;
+    }
+
+    const minAch = cfg.minAchievements ?? 1;
+    const maxAch = cfg.maxAchievements ?? 3;
+    const minImp = cfg.minImprovements ?? 1;
+    const maxImp = cfg.maxImprovements ?? 2;
     const high = cfg.highThreshold ?? 70;
     const mid = cfg.midThreshold ?? 50;
-    configSummaryBadge.textContent = `${total} Total (${minAch}-${maxAch} Str, ${minImp}-${maxImp} Gro) • Cutoffs: ≥${high}% / <${mid}%`;
+    configSummaryBadge.textContent = `${total} Comments (${minAch}-${maxAch} Str, ${minImp}-${maxImp} Gro) • Score-Differentiated (≥${high}% / <${mid}%)`;
   }
 
   function toggleGenerationConfigCard(forceOpen) {
@@ -309,11 +322,23 @@ document.addEventListener('DOMContentLoaded', () => {
   function syncGenerationConfigUI() {
     if (!cfgTotalComments) return;
     const cfg = state.generationConfig || {};
-    cfgTotalComments.value = cfg.totalComments ?? 6;
-    cfgMinAch.value = cfg.minAchievements ?? 2;
-    cfgMaxAch.value = cfg.maxAchievements ?? 4;
-    cfgMinImp.value = cfg.minImprovements ?? 2;
-    cfgMaxImp.value = cfg.maxImprovements ?? 4;
+    cfgTotalComments.value = cfg.totalComments ?? 3;
+
+    const isScoreTiers = cfg.enableScoreTiers === true;
+    if (cfgEnableScoreTiers) {
+      cfgEnableScoreTiers.checked = isScoreTiers;
+    }
+    if (cfgScoreTiersStatusBadge) {
+      cfgScoreTiersStatusBadge.textContent = isScoreTiers ? 'On (Differentiated)' : 'Off (Uniform)';
+    }
+    if (advancedScoreSettingsContainer) {
+      advancedScoreSettingsContainer.style.display = isScoreTiers ? 'block' : 'none';
+    }
+
+    if (cfgMinAch) cfgMinAch.value = cfg.minAchievements ?? 1;
+    if (cfgMaxAch) cfgMaxAch.value = cfg.maxAchievements ?? 3;
+    if (cfgMinImp) cfgMinImp.value = cfg.minImprovements ?? 1;
+    if (cfgMaxImp) cfgMaxImp.value = cfg.maxImprovements ?? 2;
     if (cfgHighThreshold) cfgHighThreshold.value = cfg.highThreshold ?? 70;
     if (cfgMidThreshold) cfgMidThreshold.value = cfg.midThreshold ?? 50;
 
@@ -324,10 +349,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateConfigPreview() {
     const cfg = state.generationConfig || {};
+    const total = cfg.totalComments ?? 3;
+    const isScoreTiers = cfg.enableScoreTiers === true;
     const highThreshold = cfg.highThreshold !== undefined ? parseInt(cfg.highThreshold, 10) : 70;
     const midThreshold = cfg.midThreshold !== undefined ? parseInt(cfg.midThreshold, 10) : 50;
 
-    // Use dynamic sample percentages reflecting the active cutoffs
     const sampleHigh = Math.min(100, Math.max(highThreshold, highThreshold + 5));
     const sampleMid = Math.round((highThreshold + midThreshold) / 2);
     const sampleLow = Math.max(0, midThreshold - 10);
@@ -377,23 +403,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (configModeDescText) {
-      configModeDescText.textContent = 'Method: Section-Prioritized Matching';
+      configModeDescText.textContent = isScoreTiers ? 'Method: Score-Differentiated Tiers' : 'Method: Uniform Target (Balanced)';
     }
 
     if (configWarningBanner) {
-      const minSum = (cfg.minAchievements ?? 2) + (cfg.minImprovements ?? 2);
-      const maxSum = (cfg.maxAchievements ?? 4) + (cfg.maxImprovements ?? 4);
-      const total = cfg.totalComments ?? 6;
+      if (isScoreTiers) {
+        const minSum = (cfg.minAchievements ?? 1) + (cfg.minImprovements ?? 1);
+        const maxSum = (cfg.maxAchievements ?? 3) + (cfg.maxImprovements ?? 2);
 
-      if (midThreshold >= highThreshold) {
-        configWarningBanner.textContent = `Warning: The Growth Focus cutoff (${midThreshold}%) must be lower than the High Score cutoff (${highThreshold}%).`;
-        configWarningBanner.style.display = 'block';
-      } else if (minSum > total) {
-        configWarningBanner.textContent = `Note: Minimum strengths (${cfg.minAchievements}) + minimum growth (${cfg.minImprovements}) = ${minSum}, which exceeds the total comments target (${total}). The generator will allocate ${minSum} comments.`;
-        configWarningBanner.style.display = 'block';
-      } else if (total > maxSum) {
-        configWarningBanner.textContent = `Note: Total comments (${total}) exceeds maximum strengths (${cfg.maxAchievements}) + maximum growth (${cfg.maxImprovements}) = ${maxSum}. The generator will allocate up to ${maxSum} comments.`;
-        configWarningBanner.style.display = 'block';
+        if (midThreshold >= highThreshold) {
+          configWarningBanner.textContent = `Warning: The Growth Focus cutoff (${midThreshold}%) must be lower than the High Score cutoff (${highThreshold}%).`;
+          configWarningBanner.style.display = 'block';
+        } else if (minSum > total) {
+          configWarningBanner.textContent = `Note: Minimum strengths (${cfg.minAchievements}) + minimum growth (${cfg.minImprovements}) = ${minSum}, which exceeds the total comments target (${total}).`;
+          configWarningBanner.style.display = 'block';
+        } else if (total > maxSum) {
+          configWarningBanner.textContent = `Note: Total comments (${total}) exceeds maximum strengths (${cfg.maxAchievements}) + maximum growth (${cfg.maxImprovements}) = ${maxSum}.`;
+          configWarningBanner.style.display = 'block';
+        } else {
+          configWarningBanner.style.display = 'none';
+        }
       } else {
         configWarningBanner.style.display = 'none';
       }
@@ -402,7 +431,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateConfigSummaryBadge();
   }
 
-  // --- Section Priority Ranking System ---
+  // --- Section Priority Ranking System (Tiles in Rows with Drag/Drop) ---
   function getAvailableAssessmentSections() {
     const sectionsSet = new Set();
     (state.questions || []).forEach(q => {
@@ -436,7 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const available = getAvailableAssessmentSections();
     const normalized = CommentEngine.normalizeSectionTiers(state.sectionRanking, available);
 
-    // Filter to retain only valid available sections
+    // Retain only valid available sections in each tier
     const filtered = [];
     normalized.forEach(tier => {
       const validInTier = tier.filter(sec => available.includes(sec));
@@ -450,22 +479,34 @@ document.addEventListener('DOMContentLoaded', () => {
     filtered.forEach(tier => tier.forEach(s => placed.add(s)));
     available.forEach(s => {
       if (s !== 'General' && !placed.has(s)) {
-        filtered.push([s]);
+        if (filtered[0]) filtered[0].push(s);
+        else filtered.push([s]);
         placed.add(s);
       }
     });
     if (!placed.has('General')) {
-      filtered.push(['General']);
+      if (filtered.length === 1) {
+        filtered[0].push('General');
+      } else {
+        filtered.push(['General']);
+      }
     }
 
     state.sectionRanking = filtered;
     renderSectionRankingUI();
   }
 
+  // Active drag state
+  let dragBoardState = {
+    sec: null,
+    sourceTier: null,
+    sourceSec: null
+  };
+
   function renderSectionRankingUI() {
-    const container = document.getElementById('sectionRankingList');
+    const board = document.getElementById('sectionPriorityBoard') || document.getElementById('sectionRankingList');
     const breadcrumb = document.getElementById('sectionRankingBreadcrumb');
-    if (!container) return;
+    if (!board) return;
 
     if (!state.sectionRanking || state.sectionRanking.length === 0) {
       syncSectionRanking();
@@ -475,154 +516,228 @@ document.addEventListener('DOMContentLoaded', () => {
     const tiers = state.sectionRanking;
     const totalTiers = tiers.length;
 
-    // Breadcrumb: e.g. Priority: SAQ > MCQ = Extended Response > General
+    // Breadcrumb: e.g. Priority: SAQ = MCQ = General
     const breadcrumbText = tiers.map(tier => Array.isArray(tier) ? tier.join(' = ') : tier).join(' > ');
     if (breadcrumb) {
       breadcrumb.textContent = `Priority: ${breadcrumbText || 'General'}`;
     }
 
-    container.innerHTML = '';
+    board.innerHTML = '';
 
+    // 1. Top Dropzone: Create Level Above First Tier
+    const topDropZone = document.createElement('div');
+    topDropZone.className = 'tier-drop-zone';
+    topDropZone.setAttribute('data-drop-action', 'create-tier-above');
+    topDropZone.setAttribute('data-target-tier', '0');
+    topDropZone.innerHTML = `
+      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"></path></svg>
+      <span>Drag a section here to create Level 1 (Top Priority)</span>
+    `;
+    board.appendChild(topDropZone);
+
+    // 2. Render each Tier Row and trailing dropzone
     tiers.forEach((tier, tierIdx) => {
       const isFirstTier = tierIdx === 0;
       const isLastTier = tierIdx === totalTiers - 1;
-      const isEqualTier = tier.length > 1;
-      const isGeneralTier = tier.length === 1 && tier[0] === 'General';
-
-      const tierGroup = document.createElement('div');
-      tierGroup.className = 'ranking-tier-group';
-      tierGroup.setAttribute('data-tier-idx', tierIdx);
-
+      const isMultiSection = tier.length > 1;
       const levelNumber = tierIdx + 1;
-      const levelTitleText = isFirstTier
-        ? `Level 1 (Top Priority)`
-        : (isGeneralTier ? `Level ${levelNumber} (Fallback)` : `Level ${levelNumber}`);
 
-      const equalBadgeHtml = isEqualTier
-        ? `<span class="ranking-tier-equal-badge">= Equal Priority (${tier.length} Sections)</span>`
+      const tierRow = document.createElement('div');
+      tierRow.className = 'tier-level-row';
+      tierRow.setAttribute('data-tier-idx', tierIdx);
+
+      const statusTag = isMultiSection
+        ? `<span class="tier-level-status">= Equal Priority (${tier.length} Sections)</span>`
         : '';
 
-      tierGroup.innerHTML = `
-        <div class="ranking-tier-header">
-          <div class="ranking-tier-title-wrap">
-            <span class="ranking-badge-order ${isGeneralTier ? 'last-resort' : ''}">${levelNumber}</span>
-            <span class="ranking-tier-title">${levelTitleText}</span>
-            ${equalBadgeHtml}
+      tierRow.innerHTML = `
+        <div class="tier-level-header">
+          <div class="tier-level-title-wrap">
+            <span class="tier-level-badge">${levelNumber}</span>
+            <span class="tier-level-title">Level ${levelNumber}</span>
+            ${statusTag}
           </div>
-          <div class="ranking-actions">
-            <button type="button" class="btn-rank-move btn-tier-up" data-tier="${tierIdx}" ${isFirstTier ? 'disabled' : ''} title="Move Level ${levelNumber} Up">
-              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 15l7-7 7 7"></path></svg>
-              <span>Move Level Up</span>
+          <div style="display: flex; align-items: center; gap: 0.35rem;">
+            <button type="button" class="btn-tier-shift btn-row-up" data-tier="${tierIdx}" ${isFirstTier ? 'disabled' : ''} title="Shift entire Level ${levelNumber} up">
+              <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 15l7-7 7 7"></path></svg>
+              <span>Move Up</span>
             </button>
-            <button type="button" class="btn-rank-move btn-tier-down" data-tier="${tierIdx}" ${isLastTier ? 'disabled' : ''} title="Move Level ${levelNumber} Down">
-              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"></path></svg>
-              <span>Move Level Down</span>
+            <button type="button" class="btn-tier-shift btn-row-down" data-tier="${tierIdx}" ${isLastTier ? 'disabled' : ''} title="Shift entire Level ${levelNumber} down">
+              <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"></path></svg>
+              <span>Move Down</span>
             </button>
           </div>
         </div>
-        <div class="ranking-tier-items"></div>
+        <div class="tier-tiles-row" data-tier-idx="${tierIdx}">
+          <!-- Tiles rendered dynamically below -->
+        </div>
       `;
 
-      const itemsContainer = tierGroup.querySelector('.ranking-tier-items');
+      const tilesContainer = tierRow.querySelector('.tier-tiles-row');
 
       tier.forEach((sec, secIdx) => {
         const achCount = commentBank.getAchievementsBySection(sec).length;
         const impCount = commentBank.getImprovementsBySection(sec).length;
         const totalCount = achCount + impCount;
 
-        const item = document.createElement('div');
-        item.className = 'section-ranking-item';
-        item.setAttribute('data-tier-idx', tierIdx);
-        item.setAttribute('data-sec-idx', secIdx);
+        const tile = document.createElement('div');
+        tile.className = 'section-tile';
+        tile.setAttribute('draggable', 'true');
+        tile.setAttribute('data-sec', sec);
+        tile.setAttribute('data-tier-idx', tierIdx);
+        tile.setAttribute('data-sec-idx', secIdx);
 
-        // Action controls
-        const canLinkAbove = tierIdx > 0;
-        const canLinkBelow = tierIdx < totalTiers - 1;
-        const canSeparate = tier.length > 1;
+        // Can move up if not (single item in top tier)
+        const canMoveUp = !(tierIdx === 0 && tier.length === 1);
+        // Can move down if not (single item in bottom tier)
+        const canMoveDown = !(tierIdx === totalTiers - 1 && tier.length === 1);
 
-        let actionsHtml = '';
-
-        if (canSeparate) {
-          actionsHtml += `
-            <button type="button" class="btn-rank-action btn-rank-split" data-tier="${tierIdx}" data-sec="${secIdx}" title="Make '${sec}' its own independent priority level">
-              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 7h8M8 12h8M8 17h8"></path></svg>
-              <span>Separate Level</span>
-            </button>
-          `;
-        }
-
-        if (canLinkAbove) {
-          actionsHtml += `
-            <button type="button" class="btn-rank-action btn-rank-link btn-link-above" data-tier="${tierIdx}" data-sec="${secIdx}" title="Place '${sec}' on same equal priority level as Level ${tierIdx} (=)">
-              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>
-              <span>Link with Above (=)</span>
-            </button>
-          `;
-        }
-
-        if (canLinkBelow) {
-          actionsHtml += `
-            <button type="button" class="btn-rank-action btn-rank-link btn-link-below" data-tier="${tierIdx}" data-sec="${secIdx}" title="Place '${sec}' on same equal priority level as Level ${tierIdx + 2} (=)">
-              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
-              <span>Link with Below (=)</span>
-            </button>
-          `;
-        }
-
-        item.innerHTML = `
-          <div class="ranking-info-group">
-            <div style="display: flex; flex-direction: column;">
-              <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span class="ranking-section-name">${sec}</span>
-                <span class="ranking-section-tag">${sec === 'General' ? 'Fallback' : (isEqualTier ? 'Equal Preference' : 'Sequential')}</span>
-              </div>
-              <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">
-                ${totalCount} bank comments (${achCount} strengths, ${impCount} growth)
-              </span>
-            </div>
+        tile.innerHTML = `
+          <span class="tile-drag-handle" title="Drag to reorder or place in another level">⋮⋮</span>
+          <div class="tile-content">
+            <span class="tile-name">${sec}</span>
+            <span class="tile-meta">${totalCount} comments</span>
           </div>
-          <div class="ranking-actions">
-            ${actionsHtml}
+          <div class="tile-actions">
+            <button type="button" class="btn-tile-action btn-tile-up" data-tier="${tierIdx}" data-sec-idx="${secIdx}" ${canMoveUp ? '' : 'disabled'} title="Move '${sec}' to level above">
+              <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 15l7-7 7 7"></path></svg>
+            </button>
+            <button type="button" class="btn-tile-action btn-tile-down" data-tier="${tierIdx}" data-sec-idx="${secIdx}" ${canMoveDown ? '' : 'disabled'} title="Move '${sec}' to level below">
+              <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"></path></svg>
+            </button>
           </div>
         `;
 
-        itemsContainer.appendChild(item);
+        tilesContainer.appendChild(tile);
       });
 
-      container.appendChild(tierGroup);
+      board.appendChild(tierRow);
+
+      // Trailing dropzone below this tier (e.g. create level below)
+      const bottomDropZone = document.createElement('div');
+      bottomDropZone.className = 'tier-drop-zone';
+      bottomDropZone.setAttribute('data-drop-action', 'create-tier-below');
+      bottomDropZone.setAttribute('data-target-tier', tierIdx);
+      bottomDropZone.innerHTML = `
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"></path></svg>
+        <span>Drag a section here to create Level ${levelNumber + 1} (Lower Priority)</span>
+      `;
+      board.appendChild(bottomDropZone);
     });
 
-    // Wire Move Level Up / Down handlers
-    container.querySelectorAll('.btn-tier-up').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const tierIdx = parseInt(e.currentTarget.getAttribute('data-tier'), 10);
-        if (tierIdx > 0) {
-          const moved = state.sectionRanking.splice(tierIdx, 1)[0];
-          state.sectionRanking.splice(tierIdx - 1, 0, moved);
-          renderSectionRankingUI();
-          triggerAutoSave();
+    // --- Wire Drag and Drop Handlers ---
+    board.querySelectorAll('.section-tile').forEach(tile => {
+      tile.addEventListener('dragstart', (e) => {
+        dragBoardState.sec = tile.getAttribute('data-sec');
+        dragBoardState.sourceTier = parseInt(tile.getAttribute('data-tier-idx'), 10);
+        dragBoardState.sourceSec = parseInt(tile.getAttribute('data-sec-idx'), 10);
+        tile.classList.add('tile-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragBoardState.sec);
+      });
+
+      tile.addEventListener('dragend', () => {
+        tile.classList.remove('tile-dragging');
+        board.querySelectorAll('.drop-hover').forEach(el => el.classList.remove('drop-hover'));
+        dragBoardState = { sec: null, sourceTier: null, sourceSec: null };
+      });
+    });
+
+    // Dropzone listeners (creating new levels)
+    board.querySelectorAll('.tier-drop-zone').forEach(dz => {
+      dz.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        dz.classList.add('drop-hover');
+      });
+
+      dz.addEventListener('dragleave', () => {
+        dz.classList.remove('drop-hover');
+      });
+
+      dz.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dz.classList.remove('drop-hover');
+        if (!dragBoardState.sec) return;
+
+        const action = dz.getAttribute('data-drop-action');
+        const targetTier = parseInt(dz.getAttribute('data-target-tier'), 10);
+
+        // Remove from source tier
+        const [movedSec] = state.sectionRanking[dragBoardState.sourceTier].splice(dragBoardState.sourceSec, 1);
+        if (state.sectionRanking[dragBoardState.sourceTier].length === 0) {
+          state.sectionRanking.splice(dragBoardState.sourceTier, 1);
         }
-      });
-    });
 
-    container.querySelectorAll('.btn-tier-down').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const tierIdx = parseInt(e.currentTarget.getAttribute('data-tier'), 10);
-        if (tierIdx < state.sectionRanking.length - 1) {
-          const moved = state.sectionRanking.splice(tierIdx, 1)[0];
-          state.sectionRanking.splice(tierIdx + 1, 0, moved);
-          renderSectionRankingUI();
-          triggerAutoSave();
+        // Insert as new tier
+        if (action === 'create-tier-above') {
+          state.sectionRanking.splice(targetTier, 0, [movedSec]);
+        } else {
+          // create-tier-below: if source was before target and removed, target index might have shifted
+          const insertIdx = (dragBoardState.sourceTier < targetTier && state.sectionRanking.length <= targetTier)
+            ? targetTier
+            : targetTier + 1;
+          state.sectionRanking.splice(insertIdx, 0, [movedSec]);
         }
+
+        renderSectionRankingUI();
+        triggerAutoSave();
       });
     });
 
-    // Wire Link with Above (=)
-    container.querySelectorAll('.btn-link-above').forEach(btn => {
+    // Row Container listeners (dropping into an existing row to share priority)
+    board.querySelectorAll('.tier-tiles-row').forEach(row => {
+      row.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        row.classList.add('drop-hover');
+      });
+
+      row.addEventListener('dragleave', () => {
+        row.classList.remove('drop-hover');
+      });
+
+      row.addEventListener('drop', (e) => {
+        e.preventDefault();
+        row.classList.remove('drop-hover');
+        if (!dragBoardState.sec) return;
+
+        const targetTier = parseInt(row.getAttribute('data-tier-idx'), 10);
+        if (targetTier === dragBoardState.sourceTier) return; // already in this tier
+
+        // Remove from source
+        const [movedSec] = state.sectionRanking[dragBoardState.sourceTier].splice(dragBoardState.sourceSec, 1);
+        if (state.sectionRanking[dragBoardState.sourceTier].length === 0) {
+          state.sectionRanking.splice(dragBoardState.sourceTier, 1);
+        }
+
+        // Add to target tier row
+        const adjustedTarget = targetTier > dragBoardState.sourceTier && state.sectionRanking.length <= targetTier
+          ? targetTier - 1
+          : targetTier;
+        state.sectionRanking[adjustedTarget].push(movedSec);
+
+        renderSectionRankingUI();
+        triggerAutoSave();
+      });
+    });
+
+    // --- Wire Button Controls (Tile Move Up / Move Down) ---
+    board.querySelectorAll('.btn-tile-up').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const tierIdx = parseInt(e.currentTarget.getAttribute('data-tier'), 10);
-        const secIdx = parseInt(e.currentTarget.getAttribute('data-sec'), 10);
-        if (tierIdx > 0) {
+        const secIdx = parseInt(e.currentTarget.getAttribute('data-sec-idx'), 10);
+
+        if (tierIdx === 0) {
+          // If in Level 1 and multiple items exist, create new Level 1 above with this section!
+          if (state.sectionRanking[0].length > 1) {
+            const [sec] = state.sectionRanking[0].splice(secIdx, 1);
+            state.sectionRanking.unshift([sec]);
+            renderSectionRankingUI();
+            triggerAutoSave();
+          }
+        } else {
+          // Move into tier above
           const [sec] = state.sectionRanking[tierIdx].splice(secIdx, 1);
           state.sectionRanking[tierIdx - 1].push(sec);
           if (state.sectionRanking[tierIdx].length === 0) {
@@ -634,12 +749,21 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
 
-    // Wire Link with Below (=)
-    container.querySelectorAll('.btn-link-below').forEach(btn => {
+    board.querySelectorAll('.btn-tile-down').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const tierIdx = parseInt(e.currentTarget.getAttribute('data-tier'), 10);
-        const secIdx = parseInt(e.currentTarget.getAttribute('data-sec'), 10);
-        if (tierIdx < state.sectionRanking.length - 1) {
+        const secIdx = parseInt(e.currentTarget.getAttribute('data-sec-idx'), 10);
+
+        if (tierIdx === totalTiers - 1) {
+          // If in bottom tier and multiple items exist, create new Level below with this section!
+          if (state.sectionRanking[tierIdx].length > 1) {
+            const [sec] = state.sectionRanking[tierIdx].splice(secIdx, 1);
+            state.sectionRanking.push([sec]);
+            renderSectionRankingUI();
+            triggerAutoSave();
+          }
+        } else {
+          // Move into tier below
           const [sec] = state.sectionRanking[tierIdx].splice(secIdx, 1);
           state.sectionRanking[tierIdx + 1].unshift(sec);
           if (state.sectionRanking[tierIdx].length === 0) {
@@ -651,14 +775,25 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
 
-    // Wire Separate Level
-    container.querySelectorAll('.btn-rank-split').forEach(btn => {
+    // Tier Shift Row Up / Down
+    board.querySelectorAll('.btn-row-up').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const tierIdx = parseInt(e.currentTarget.getAttribute('data-tier'), 10);
-        const secIdx = parseInt(e.currentTarget.getAttribute('data-sec'), 10);
-        if (state.sectionRanking[tierIdx].length > 1) {
-          const [sec] = state.sectionRanking[tierIdx].splice(secIdx, 1);
-          state.sectionRanking.splice(tierIdx + 1, 0, [sec]);
+        if (tierIdx > 0) {
+          const moved = state.sectionRanking.splice(tierIdx, 1)[0];
+          state.sectionRanking.splice(tierIdx - 1, 0, moved);
+          renderSectionRankingUI();
+          triggerAutoSave();
+        }
+      });
+    });
+
+    board.querySelectorAll('.btn-row-down').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const tierIdx = parseInt(e.currentTarget.getAttribute('data-tier'), 10);
+        if (tierIdx < state.sectionRanking.length - 1) {
+          const moved = state.sectionRanking.splice(tierIdx, 1)[0];
+          state.sectionRanking.splice(tierIdx + 1, 0, moved);
           renderSectionRankingUI();
           triggerAutoSave();
         }
@@ -681,20 +816,35 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    const onNumChange = () => {
-      let total = parseInt(cfgTotalComments.value, 10);
-      if (isNaN(total) || total < 1) total = 6;
+    if (cfgEnableScoreTiers) {
+      cfgEnableScoreTiers.addEventListener('change', () => {
+        state.generationConfig.enableScoreTiers = cfgEnableScoreTiers.checked;
+        if (cfgScoreTiersStatusBadge) {
+          cfgScoreTiersStatusBadge.textContent = cfgEnableScoreTiers.checked ? 'On (Differentiated)' : 'Off (Uniform)';
+        }
+        if (advancedScoreSettingsContainer) {
+          advancedScoreSettingsContainer.style.display = cfgEnableScoreTiers.checked ? 'block' : 'none';
+        }
+        updateConfigSummaryBadge();
+        updateConfigPreview();
+        triggerAutoSave();
+      });
+    }
 
-      let minAch = parseInt(cfgMinAch.value, 10);
+    const onNumChange = () => {
+      let total = parseInt(cfgTotalComments ? cfgTotalComments.value : 3, 10);
+      if (isNaN(total) || total < 1) total = 3;
+
+      let minAch = parseInt(cfgMinAch ? cfgMinAch.value : 1, 10);
       if (isNaN(minAch) || minAch < 0) minAch = 0;
 
-      let maxAch = parseInt(cfgMaxAch.value, 10);
+      let maxAch = parseInt(cfgMaxAch ? cfgMaxAch.value : 3, 10);
       if (isNaN(maxAch) || maxAch < minAch) maxAch = minAch;
 
-      let minImp = parseInt(cfgMinImp.value, 10);
+      let minImp = parseInt(cfgMinImp ? cfgMinImp.value : 1, 10);
       if (isNaN(minImp) || minImp < 0) minImp = 0;
 
-      let maxImp = parseInt(cfgMaxImp.value, 10);
+      let maxImp = parseInt(cfgMaxImp ? cfgMaxImp.value : 2, 10);
       if (isNaN(maxImp) || maxImp < minImp) maxImp = minImp;
 
       let highThresh = parseInt(cfgHighThreshold ? cfgHighThreshold.value : 70, 10);
@@ -1385,8 +1535,8 @@ document.addEventListener('DOMContentLoaded', () => {
           selectedSheet: 'SAC 1 Matrices',
           questions: demoQuestions,
           students: demoStudents,
-          sectionRanking: [['SAQ'], ['MCQ'], ['General']],
-          generationConfig: { totalComments: 4, minAchievements: 2, maxAchievements: 3, minImprovements: 1, maxImprovements: 2, highThreshold: 70, midThreshold: 50 },
+          sectionRanking: [['SAQ', 'MCQ', 'General']],
+          generationConfig: { totalComments: 3, enableScoreTiers: false, minAchievements: 1, maxAchievements: 3, minImprovements: 1, maxImprovements: 2, highThreshold: 70, midThreshold: 50 },
           commentBank: demoBank,
           generatedComments: demoComments,
           currentStep: 4,

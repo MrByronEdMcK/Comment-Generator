@@ -342,91 +342,167 @@
 
             <!-- Collapsible Body Section -->
             <div class="config-card-body" id="configCardBody">
-              <!-- Settings Form Grid -->
-              <div class="config-grid">
+              <!-- Primary Simple Settings Row -->
+              <div class="config-primary-row">
                 <!-- Total Comments Card -->
                 <div class="config-card-box">
                   <div class="config-box-header">
                     <span class="config-box-title">Total Comments</span>
-                    <span class="config-box-badge">Per Student</span>
+                    <span class="config-box-badge">Default Target</span>
                   </div>
                   <div class="config-input-wrapper">
-                    <input type="number" id="cfgTotalComments" class="config-num-input-large" value="6" min="2" max="12" step="1">
-                    <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">sentences</span>
+                    <input type="number" id="cfgTotalComments" class="config-num-input-large" value="3" min="1" max="12" step="1">
+                    <span style="font-size: 0.9rem; color: var(--text-muted); font-weight: 600;">sentences per student</span>
                   </div>
-                  <p class="config-box-hint">Target total feedback sentences per student.</p>
+                  <p class="config-box-hint">Target total feedback sentences generated for each student.</p>
                 </div>
 
-                <!-- Achievements Range Card -->
+                <!-- Score-Based Differentiation Toggle Card -->
                 <div class="config-card-box">
                   <div class="config-box-header">
-                    <span class="config-box-title" style="color: var(--accent-achievement);">Achievements (Strengths)</span>
-                    <span class="badge-achieve">Target Range</span>
+                    <span class="config-box-title">Score-Based Comment Distribution</span>
+                    <span id="cfgScoreTiersStatusBadge" class="config-box-badge">Off (Uniform)</span>
                   </div>
-                  <div class="config-range-inputs">
-                    <div class="range-input-group">
-                      <span class="range-label">Min</span>
-                      <input type="number" id="cfgMinAch" class="config-num-input" value="2" min="0" max="10" step="1">
-                    </div>
-                    <span style="color: var(--text-light); font-size: 0.8rem;">to</span>
-                    <div class="range-input-group">
-                      <span class="range-label">Max</span>
-                      <input type="number" id="cfgMaxAch" class="config-num-input" value="4" min="1" max="10" step="1">
-                    </div>
+                  <div style="display: flex; align-items: center; gap: 0.75rem; margin: 0.35rem 0;">
+                    <label class="toggle-switch" for="cfgEnableScoreTiers">
+                      <input type="checkbox" id="cfgEnableScoreTiers">
+                      <span class="toggle-slider"></span>
+                    </label>
+                    <label for="cfgEnableScoreTiers" style="font-size: 0.88rem; font-weight: 600; cursor: pointer; color: var(--text-main);">
+                      Differentiate comments by student score
+                    </label>
                   </div>
-                  <p class="config-box-hint">Minimum and maximum achievement comments.</p>
-                </div>
-
-                <!-- Improvements Range Card -->
-                <div class="config-card-box">
-                  <div class="config-box-header">
-                    <span class="config-box-title" style="color: var(--accent-improvement);">Improvements (Growth)</span>
-                    <span class="badge-improve">Target Range</span>
-                  </div>
-                  <div class="config-range-inputs">
-                    <div class="range-input-group">
-                      <span class="range-label">Min</span>
-                      <input type="number" id="cfgMinImp" class="config-num-input" value="2" min="0" max="10" step="1">
-                    </div>
-                    <span style="color: var(--text-light); font-size: 0.8rem;">to</span>
-                    <div class="range-input-group">
-                      <span class="range-label">Max</span>
-                      <input type="number" id="cfgMaxImp" class="config-num-input" value="4" min="1" max="10" step="1">
-                    </div>
-                  </div>
-                  <p class="config-box-hint">Minimum and maximum growth comments.</p>
-                </div>
-
-                <!-- Score Grade Ranges Card -->
-                <div class="config-card-box">
-                  <div class="config-box-header">
-                    <span class="config-box-title">Score Grade Ranges</span>
-                    <span class="config-box-badge">Cutoffs</span>
-                  </div>
-                  <div class="config-range-inputs">
-                    <div class="range-input-group">
-                      <span class="range-label">High &ge;</span>
-                      <input type="number" id="cfgHighThreshold" class="config-num-input" value="70" min="1" max="100" step="1">
-                      <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">%</span>
-                    </div>
-                    <span style="color: var(--text-light); font-size: 0.8rem;">to</span>
-                    <div class="range-input-group">
-                      <span class="range-label">Growth &lt;</span>
-                      <input type="number" id="cfgMidThreshold" class="config-num-input" value="50" min="0" max="99" step="1">
-                      <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">%</span>
-                    </div>
-                  </div>
-                  <p class="config-box-hint" id="cfgGradeRangesHint">High &ge; 70%, Mid 50&ndash;69%, Growth &lt; 50%.</p>
+                  <p class="config-box-hint">
+                    When off (default), all students receive a uniform balanced feedback structure (e.g. 2 strengths, 1 growth). Turn on to customize score cutoffs and target ranges.
+                  </p>
                 </div>
               </div>
 
-              <!-- Section Priority Ranking Card -->
+              <!-- Advanced Score Settings (Hidden by default; toggled via cfgEnableScoreTiers) -->
+              <div id="advancedScoreSettingsContainer" class="advanced-score-settings" style="display: none;">
+                <div class="config-grid advanced-grid">
+                  <!-- Achievements & Improvements Target Ranges Card -->
+                  <div class="config-card-box">
+                    <div class="config-box-header">
+                      <span class="config-box-title">Strengths &amp; Growth Ranges</span>
+                      <span class="badge-achieve">Target Ranges</span>
+                    </div>
+                    <div class="advanced-range-pairs">
+                      <div class="range-pair">
+                        <span class="range-pair-label" style="color: var(--accent-achievement);">Strengths:</span>
+                        <div class="range-input-group">
+                          <span class="range-label">Min</span>
+                          <input type="number" id="cfgMinAch" class="config-num-input" value="1" min="0" max="10" step="1">
+                          <span style="color: var(--text-light); font-size: 0.8rem;">to</span>
+                          <span class="range-label">Max</span>
+                          <input type="number" id="cfgMaxAch" class="config-num-input" value="3" min="1" max="10" step="1">
+                        </div>
+                      </div>
+                      <div class="range-pair">
+                        <span class="range-pair-label" style="color: var(--accent-improvement);">Growth:</span>
+                        <div class="range-input-group">
+                          <span class="range-label">Min</span>
+                          <input type="number" id="cfgMinImp" class="config-num-input" value="1" min="0" max="10" step="1">
+                          <span style="color: var(--text-light); font-size: 0.8rem;">to</span>
+                          <span class="range-label">Max</span>
+                          <input type="number" id="cfgMaxImp" class="config-num-input" value="2" min="1" max="10" step="1">
+                        </div>
+                      </div>
+                    </div>
+                    <p class="config-box-hint">Allocated sentence ranges based on performance tier.</p>
+                  </div>
+
+                  <!-- Score Grade Cutoffs Card -->
+                  <div class="config-card-box">
+                    <div class="config-box-header">
+                      <span class="config-box-title">Score Grade Cutoffs</span>
+                      <span class="config-box-badge">Thresholds</span>
+                    </div>
+                    <div class="advanced-thresholds-wrap">
+                      <div class="threshold-input-item">
+                        <span class="range-label">High Score Cutoff: &ge;</span>
+                        <input type="number" id="cfgHighThreshold" class="config-num-input-spacious" value="70" min="1" max="100" step="1">
+                        <span class="unit-pct">%</span>
+                      </div>
+                      <div class="threshold-input-item">
+                        <span class="range-label">Growth Focus Cutoff: &lt;</span>
+                        <input type="number" id="cfgMidThreshold" class="config-num-input-spacious" value="50" min="0" max="99" step="1">
+                        <span class="unit-pct">%</span>
+                      </div>
+                    </div>
+                    <p class="config-box-hint" id="cfgGradeRangesHint">High &ge; 70%, Mid 50&ndash;69%, Growth &lt; 50%.</p>
+                  </div>
+                </div>
+
+                <!-- Live Allocation Preview Section -->
+                <div class="config-preview-container" style="margin-top: 1rem;">
+                  <div class="preview-header">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color: var(--primary);">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                      </svg>
+                      <span class="preview-title">Score-Based Comment Allocation Preview</span>
+                    </div>
+                    <span id="configModeDescText" class="preview-mode-tag">Method: Section-Prioritized Matching</span>
+                  </div>
+
+                  <!-- 3 Tier Cards -->
+                  <div class="preview-tier-grid" id="previewTierGrid">
+                    <!-- High Score Tier -->
+                    <div class="tier-card">
+                      <div class="tier-card-head">
+                        <span class="tier-badge high" id="badgeTierHigh">High Scores (&ge;70%)</span>
+                        <span class="tier-total" id="tierHighTotal">3 comments</span>
+                      </div>
+                      <div class="tier-breakdown">
+                        <div class="tier-pill pill-achieve"><strong id="lblTierHighAch">2</strong> Strengths</div>
+                        <span class="tier-plus">+</span>
+                        <div class="tier-pill pill-improve"><strong id="lblTierHighImp">1</strong> Growth</div>
+                      </div>
+                      <div class="tier-desc">Emphasizes mastered skills and top achievements.</div>
+                    </div>
+
+                    <!-- Mid Score Tier -->
+                    <div class="tier-card">
+                      <div class="tier-card-head">
+                        <span class="tier-badge mid" id="badgeTierMid">Mid Scores (50-69%)</span>
+                        <span class="tier-total" id="tierMidTotal">3 comments</span>
+                      </div>
+                      <div class="tier-breakdown">
+                        <div class="tier-pill pill-achieve"><strong id="lblTierMidAch">2</strong> Strengths</div>
+                        <span class="tier-plus">+</span>
+                        <div class="tier-pill pill-improve"><strong id="lblTierMidImp">1</strong> Growth</div>
+                      </div>
+                      <div class="tier-desc">Balanced mix of achievements and improvement targets.</div>
+                    </div>
+
+                    <!-- Low Score Tier -->
+                    <div class="tier-card">
+                      <div class="tier-card-head">
+                        <span class="tier-badge low" id="badgeTierLow">Growth Focus (&lt;50%)</span>
+                        <span class="tier-total" id="tierLowTotal">3 comments</span>
+                      </div>
+                      <div class="tier-breakdown">
+                        <div class="tier-pill pill-achieve"><strong id="lblTierLowAch">1</strong> Strengths</div>
+                        <span class="tier-plus">+</span>
+                        <div class="tier-pill pill-improve"><strong id="lblTierLowImp">2</strong> Growth</div>
+                      </div>
+                      <div class="tier-desc">Provides constructive focus on key areas for improvement.</div>
+                    </div>
+                  </div>
+
+                  <!-- Warning Alert -->
+                  <div id="configWarningBanner" class="alert-info" style="display: none; margin-top: 0.85rem;"></div>
+                </div>
+              </div>
+
+              <!-- Section Priority Board Card -->
               <div class="section-ranking-container">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.65rem;">
                   <div>
                     <strong style="font-size: 0.95rem; color: var(--text-main);">Section Priority Order</strong>
                     <p style="margin: 0.2rem 0 0 0; font-size: 0.82rem; color: var(--text-muted);">
-                      Place sections in priority tiers. Sections on the same level have equal preference; lower levels and General comments are used as fallback.
+                      Sections in the same row have equal priority. Drag any section above or below to establish priority levels.
                     </p>
                   </div>
                   <div id="sectionRankingBreadcrumb" class="preview-mode-tag">
@@ -434,71 +510,12 @@
                   </div>
                 </div>
 
-                <div id="sectionRankingList" class="section-ranking-list">
-                  <!-- Dynamically populated tiered ranking rows with priority badges and action buttons -->
+                <!-- Section Priority Board (Tiles in Rows with Drag Above/Below Dropzones) -->
+                <div id="sectionPriorityBoard" class="section-priority-board">
+                  <!-- Populated dynamically: tier rows with tiles and drag zones -->
                 </div>
               </div>
-
-              <!-- Live Allocation Preview Section -->
-              <div class="config-preview-container">
-                <div class="preview-header">
-                  <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color: var(--primary);">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-                    </svg>
-                    <span class="preview-title">Score-Based Comment Allocation Preview</span>
-                  </div>
-                  <span id="configModeDescText" class="preview-mode-tag">Method: Section-Prioritized Matching</span>
-                </div>
-
-                <!-- 3 Tier Cards -->
-                <div class="preview-tier-grid" id="previewTierGrid">
-                  <!-- High Score Tier -->
-                  <div class="tier-card">
-                    <div class="tier-card-head">
-                      <span class="tier-badge high" id="badgeTierHigh">High Scores (&ge;70%)</span>
-                      <span class="tier-total" id="tierHighTotal">6 comments</span>
-                    </div>
-                    <div class="tier-breakdown">
-                      <div class="tier-pill pill-achieve"><strong id="lblTierHighAch">4</strong> Strengths</div>
-                      <span class="tier-plus">+</span>
-                      <div class="tier-pill pill-improve"><strong id="lblTierHighImp">2</strong> Growth</div>
-                    </div>
-                    <div class="tier-desc">Emphasizes mastered skills and top achievements.</div>
-                  </div>
-
-                  <!-- Mid Score Tier -->
-                  <div class="tier-card">
-                    <div class="tier-card-head">
-                      <span class="tier-badge mid" id="badgeTierMid">Mid Scores (50-69%)</span>
-                      <span class="tier-total" id="tierMidTotal">6 comments</span>
-                    </div>
-                    <div class="tier-breakdown">
-                      <div class="tier-pill pill-achieve"><strong id="lblTierMidAch">3</strong> Strengths</div>
-                      <span class="tier-plus">+</span>
-                      <div class="tier-pill pill-improve"><strong id="lblTierMidImp">3</strong> Growth</div>
-                    </div>
-                    <div class="tier-desc">Balanced mix of achievements and improvement targets.</div>
-                  </div>
-
-                  <!-- Low Score Tier -->
-                  <div class="tier-card">
-                    <div class="tier-card-head">
-                      <span class="tier-badge low" id="badgeTierLow">Growth Focus (&lt;50%)</span>
-                      <span class="tier-total" id="tierLowTotal">6 comments</span>
-                    </div>
-                    <div class="tier-breakdown">
-                      <div class="tier-pill pill-achieve"><strong id="lblTierLowAch">2</strong> Strengths</div>
-                      <span class="tier-plus">+</span>
-                      <div class="tier-pill pill-improve"><strong id="lblTierLowImp">4</strong> Growth</div>
-                    </div>
-                    <div class="tier-desc">Provides constructive focus on key areas for improvement.</div>
-                  </div>
-                </div>
-
-                <!-- Warning Alert -->
-                <div id="configWarningBanner" class="alert-info" style="display: none; margin-top: 0.85rem;"></div>
-              </div>
+            </div>
             </div>
           </div>
 
