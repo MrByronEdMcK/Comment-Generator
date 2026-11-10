@@ -1047,7 +1047,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     lines.forEach(text => {
       const parsed = CommentEngine.parseCommentEntry(text);
-      const tags = parsed.tags.length > 0 ? parsed.tags : ['Imported'];
+      const tags = (Array.isArray(parsed?.tags) && parsed.tags.length > 0) ? parsed.tags : ['Imported'];
       if (category === 'achievements') {
         commentBank.addAchievement(parsed.text, tags, parsed.questionId, targetSection, parsed.questionIds);
       } else {
@@ -1057,6 +1057,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     closeBulkModal();
     renderStep3CommentBank();
+    triggerAutoSave();
   });
 
   // Step 4 DOM

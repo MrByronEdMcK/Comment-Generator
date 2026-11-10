@@ -84,20 +84,41 @@ def parse_comment_entry(entry):
 
     clean_text = raw_text.strip()
 
-    prefix_match = re.match(
-        r'^(?:(?:Questions?|Q)\s*)?((?:\d+[a-z]*(?:(?:\s*(?:,\s*|\s+and\s+|\s*&\s*|\s*,\s*(?:Questions?|Q)\s*)\s*|\s*(?:-|to)\s*(?=(?:(?:Questions?|Q)\s*)?\d|[a-z]{1,4}(?:[\t:\.\-\)]|\s+[A-Z]))|\s+(?=(?:(?:Questions?|Q)\s*)?\d))(?:\d+[a-z]*|[a-z]{1,4}))*))(?:\s*[\t:\.\-\)]+\s*|\s+(?=[A-Z]))(.*)$',
-        clean_text,
-        flags=re.IGNORECASE
-    )
+    # If question_ids not explicitly provided, extract from leading prefix
+    # Handles prefixes like "Q1,2, 4\t...", "7a, b Used...", "1\tDetermine...", "Q1-3\t..."
+    if not question_ids:
+        # 1. Tab separated (typical Excel / spreadsheet column copy-paste)
+        if '\t' in clean_text:
+            tab_idx = clean_text.find('\t')
+            prefix = clean_text[:tab_idx].strip()
+            remainder = clean_text[tab_idx + 1:].strip()
+            if prefix and remainder:
+                extracted = extract_question_ids_from_expression(prefix)
+                if extracted:
+                    question_ids = extracted
+                    clean_text = remainder
 
-    if prefix_match:
-        q_expr = prefix_match.group(1).strip()
-        remainder = prefix_match.group(2).strip()
-        if re.match(r'^\d', q_expr) or re.match(r'^[Qq]\d', q_expr):
-            extracted = extract_question_ids_from_expression(q_expr)
-            if extracted and remainder:
-                question_ids = extracted
-                clean_text = remainder
+        # 2. Colon, dash, dot, paren, or whitespace separated with question prefix
+        if not question_ids:
+            m = re.match(r'^(?:(?:Questions?|Q)\s*)?([0-9]+[a-z0-9\s,\-&to]*?)(?:\s*[:\.\-\)]+\s+|\s*[\t]+\s*)([A-Z].*)$', clean_text, re.IGNORECASE)
+            if m:
+                prefix = m.group(1).strip()
+                remainder = m.group(2).strip()
+                extracted = extract_question_ids_from_expression(prefix)
+                if extracted:
+                    question_ids = extracted
+                    clean_text = remainder
+
+        # 3. Simple space before capital letter e.g. "Q1 Correctly...", "8di Demonstrated..."
+        if not question_ids:
+            m2 = re.match(r'^(?:(?:Questions?|Q)\s*)?([0-9]+[a-z]{0,4})\s+([A-Z].*)$', clean_text, re.IGNORECASE)
+            if m2:
+                prefix = m2.group(1).strip()
+                remainder = m2.group(2).strip()
+                extracted = extract_question_ids_from_expression(prefix)
+                if extracted:
+                    question_ids = extracted
+                    clean_text = remainder
 
     if not question_ids:
         for t in tags:

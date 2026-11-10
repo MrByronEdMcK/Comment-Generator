@@ -244,22 +244,91 @@ class CommentEngine {
    * Helper: Parse a comment entry into a structured object
    */
   static parseCommentEntry(entry) {
-    const text = typeof entry === 'string' ? entry.trim() : (entry.text || entry.comment || '').trim();
-    const explicitSection = (entry.section && entry.section !== 'General') ? entry.section : null;
+    const rawText = typeof entry === 'string' ? entry : (entry?.text || entry?.comment || '');
+    const tags = (typeof entry === 'object' && Array.isArray(entry?.tags)) ? [...entry.tags] : [];
+    const explicitSection = (typeof entry === 'object' && entry?.section && entry.section !== 'General') ? entry.section : null;
 
     let questionIds = [];
-    if (Array.isArray(entry.questionIds) && entry.questionIds.length > 0) {
+    if (typeof entry === 'object' && Array.isArray(entry?.questionIds) && entry.questionIds.length > 0) {
       questionIds = entry.questionIds.map(q => q.toString().trim());
-    } else if (entry.questionId) {
+    } else if (typeof entry === 'object' && entry?.questionId) {
       questionIds = CommentEngine.extractQuestionIdsFromExpression(entry.questionId.toString());
     }
 
-    const isGeneral = questionIds.length === 0 && !explicitSection;
+    let cleanText = (rawText || '').trim();
+
+    // If questionIds not explicitly provided, extract from leading prefix
+    // Handles prefixes like "Q1,2, 4\t...", "7a, b Used...", "1\tDetermine...", "Q1-3\t..."
+    if (questionIds.length === 0) {
+      // 1. Tab separated (typical Excel / spreadsheet column copy-paste)
+      if (cleanText.includes('\t')) {
+        const tabIdx = cleanText.indexOf('\t');
+        const prefix = cleanText.substring(0, tabIdx).trim();
+        const remainder = cleanText.substring(tabIdx + 1).trim();
+        if (prefix && remainder) {
+          const extracted = CommentEngine.extractQuestionIdsFromExpression(prefix);
+          if (extracted.length > 0) {
+            questionIds = extracted;
+            cleanText = remainder;
+          }
+        }
+      }
+
+      // 2. Colon, dash, dot, paren, or whitespace separated with question prefix
+      if (questionIds.length === 0) {
+        const m = cleanText.match(/^(?:(?:Questions?|Q)\s*)?([0-9]+[a-z0-9\s,\-&to]*?)(?:\s*[:\.\-\)]+\s+|\s*[\t]+\s*)([A-Z].*)$/i);
+        if (m) {
+          const prefix = m[1].trim();
+          const remainder = m[2].trim();
+          const extracted = CommentEngine.extractQuestionIdsFromExpression(prefix);
+          if (extracted.length > 0) {
+            questionIds = extracted;
+            cleanText = remainder;
+          }
+        }
+      }
+
+      // 3. Simple space before capital letter e.g. "Q1 Correctly...", "8di Demonstrated..."
+      if (questionIds.length === 0) {
+        const m2 = cleanText.match(/^(?:(?:Questions?|Q)\s*)?([0-9]+[a-z]{0,4})\s+([A-Z].*)$/i);
+        if (m2) {
+          const prefix = m2[1].trim();
+          const remainder = m2[2].trim();
+          const extracted = CommentEngine.extractQuestionIdsFromExpression(prefix);
+          if (extracted.length > 0) {
+            questionIds = extracted;
+            cleanText = remainder;
+          }
+        }
+      }
+    }
+
+    if (questionIds.length === 0 && tags.length > 0) {
+      tags.forEach(t => {
+        const m = t.match(/^(?:Q\s*)?(\d+)([a-z]+)?$/i);
+        if (m) {
+          const num = m[1];
+          const letter = m[2] ? m[2].toLowerCase() : '';
+          const qId = `Q${num}${letter}`;
+          if (!questionIds.includes(qId)) {
+            questionIds.push(qId);
+          }
+        }
+      });
+    }
+
+    cleanText = cleanText.replace(/^(?:(?:Questions?|Q)\s*\d+[a-z]*[\s:\.\-\)]+)/i, '').trim();
+
+    const customTags = tags.filter(t => !/^(?:Q\s*)?\d+[a-z]*$/i.test(t) && !questionIds.includes(t));
+    const isGeneral = questionIds.length === 0 && (!explicitSection || explicitSection === 'General');
 
     return {
-      text,
+      text: cleanText,
+      rawText,
+      questionId: questionIds.length > 0 ? questionIds[0] : null,
       questionIds,
       section: explicitSection,
+      tags: customTags,
       isGeneral
     };
   }
