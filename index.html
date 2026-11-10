@@ -396,6 +396,28 @@
                   </div>
                   <p class="config-box-hint">Minimum and maximum growth comments.</p>
                 </div>
+
+                <!-- Score Grade Ranges Card -->
+                <div class="config-card-box">
+                  <div class="config-box-header">
+                    <span class="config-box-title">Score Grade Ranges</span>
+                    <span class="config-box-badge">Cutoffs</span>
+                  </div>
+                  <div class="config-range-inputs">
+                    <div class="range-input-group">
+                      <span class="range-label">High &ge;</span>
+                      <input type="number" id="cfgHighThreshold" class="config-num-input" value="70" min="1" max="100" step="1">
+                      <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">%</span>
+                    </div>
+                    <span style="color: var(--text-light); font-size: 0.8rem;">to</span>
+                    <div class="range-input-group">
+                      <span class="range-label">Growth &lt;</span>
+                      <input type="number" id="cfgMidThreshold" class="config-num-input" value="50" min="0" max="99" step="1">
+                      <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">%</span>
+                    </div>
+                  </div>
+                  <p class="config-box-hint" id="cfgGradeRangesHint">High &ge; 70%, Mid 50&ndash;69%, Growth &lt; 50%.</p>
+                </div>
               </div>
 
               <!-- Section Priority Ranking Card -->
@@ -404,7 +426,7 @@
                   <div>
                     <strong style="font-size: 0.95rem; color: var(--text-main);">Section Priority Order</strong>
                     <p style="margin: 0.2rem 0 0 0; font-size: 0.82rem; color: var(--text-muted);">
-                      Higher-ranked section comments are chosen first. Lower-ranked and General comments are used only when needed to meet sentence targets.
+                      Place sections in priority tiers. Sections on the same level have equal preference; lower levels and General comments are used as fallback.
                     </p>
                   </div>
                   <div id="sectionRankingBreadcrumb" class="preview-mode-tag">
@@ -413,7 +435,7 @@
                 </div>
 
                 <div id="sectionRankingList" class="section-ranking-list">
-                  <!-- Dynamically populated ranking rows with rank badges and Move Up/Down buttons -->
+                  <!-- Dynamically populated tiered ranking rows with priority badges and action buttons -->
                 </div>
               </div>
 
@@ -434,7 +456,7 @@
                   <!-- High Score Tier -->
                   <div class="tier-card">
                     <div class="tier-card-head">
-                      <span class="tier-badge high">High Scores (&ge;70%)</span>
+                      <span class="tier-badge high" id="badgeTierHigh">High Scores (&ge;70%)</span>
                       <span class="tier-total" id="tierHighTotal">6 comments</span>
                     </div>
                     <div class="tier-breakdown">
@@ -448,7 +470,7 @@
                   <!-- Mid Score Tier -->
                   <div class="tier-card">
                     <div class="tier-card-head">
-                      <span class="tier-badge mid">Mid Scores (50-69%)</span>
+                      <span class="tier-badge mid" id="badgeTierMid">Mid Scores (50-69%)</span>
                       <span class="tier-total" id="tierMidTotal">6 comments</span>
                     </div>
                     <div class="tier-breakdown">
@@ -462,7 +484,7 @@
                   <!-- Low Score Tier -->
                   <div class="tier-card">
                     <div class="tier-card-head">
-                      <span class="tier-badge low">Growth Focus (&lt;50%)</span>
+                      <span class="tier-badge low" id="badgeTierLow">Growth Focus (&lt;50%)</span>
                       <span class="tier-total" id="tierLowTotal">6 comments</span>
                     </div>
                     <div class="tier-breakdown">

@@ -212,6 +212,8 @@ document.addEventListener('DOMContentLoaded', () => {
       maxAchievements: 4,
       minImprovements: 2,
       maxImprovements: 4,
+      highThreshold: 70,
+      midThreshold: 50,
       ...(assessment.generationConfig || {})
     };
 
@@ -257,6 +259,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const cfgMaxAch = document.getElementById('cfgMaxAch');
   const cfgMinImp = document.getElementById('cfgMinImp');
   const cfgMaxImp = document.getElementById('cfgMaxImp');
+  const cfgHighThreshold = document.getElementById('cfgHighThreshold');
+  const cfgMidThreshold = document.getElementById('cfgMidThreshold');
+  const cfgGradeRangesHint = document.getElementById('cfgGradeRangesHint');
+  const badgeTierHigh = document.getElementById('badgeTierHigh');
+  const badgeTierMid = document.getElementById('badgeTierMid');
+  const badgeTierLow = document.getElementById('badgeTierLow');
 
   function updateConfigSummaryBadge() {
     if (!configSummaryBadge) return;
@@ -266,7 +274,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const maxAch = cfg.maxAchievements ?? 4;
     const minImp = cfg.minImprovements ?? 2;
     const maxImp = cfg.maxImprovements ?? 4;
-    configSummaryBadge.textContent = `${total} Total (${minAch}-${maxAch} Str, ${minImp}-${maxImp} Gro) • Section-Ranked`;
+    const high = cfg.highThreshold ?? 70;
+    const mid = cfg.midThreshold ?? 50;
+    configSummaryBadge.textContent = `${total} Total (${minAch}-${maxAch} Str, ${minImp}-${maxImp} Gro) • Cutoffs: ≥${high}% / <${mid}%`;
   }
 
   function toggleGenerationConfigCard(forceOpen) {
@@ -298,12 +308,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function syncGenerationConfigUI() {
     if (!cfgTotalComments) return;
-    const cfg = state.generationConfig;
+    const cfg = state.generationConfig || {};
     cfgTotalComments.value = cfg.totalComments ?? 6;
     cfgMinAch.value = cfg.minAchievements ?? 2;
     cfgMaxAch.value = cfg.maxAchievements ?? 4;
     cfgMinImp.value = cfg.minImprovements ?? 2;
     cfgMaxImp.value = cfg.maxImprovements ?? 4;
+    if (cfgHighThreshold) cfgHighThreshold.value = cfg.highThreshold ?? 70;
+    if (cfgMidThreshold) cfgMidThreshold.value = cfg.midThreshold ?? 50;
 
     updateConfigSummaryBadge();
     updateConfigPreview();
@@ -311,10 +323,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateConfigPreview() {
-    const cfg = state.generationConfig;
-    const high = CommentEngine.getTargetDistribution(85, cfg);
-    const mid = CommentEngine.getTargetDistribution(60, cfg);
-    const low = CommentEngine.getTargetDistribution(35, cfg);
+    const cfg = state.generationConfig || {};
+    const highThreshold = cfg.highThreshold !== undefined ? parseInt(cfg.highThreshold, 10) : 70;
+    const midThreshold = cfg.midThreshold !== undefined ? parseInt(cfg.midThreshold, 10) : 50;
+
+    // Use dynamic sample percentages reflecting the active cutoffs
+    const sampleHigh = Math.min(100, Math.max(highThreshold, highThreshold + 5));
+    const sampleMid = Math.round((highThreshold + midThreshold) / 2);
+    const sampleLow = Math.max(0, midThreshold - 10);
+
+    const high = CommentEngine.getTargetDistribution(sampleHigh, cfg);
+    const mid = CommentEngine.getTargetDistribution(sampleMid, cfg);
+    const low = CommentEngine.getTargetDistribution(sampleLow, cfg);
 
     const lblTierHighAch = document.getElementById('lblTierHighAch');
     const lblTierHighImp = document.getElementById('lblTierHighImp');
@@ -330,6 +350,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const configModeDescText = document.getElementById('configModeDescText');
     const configWarningBanner = document.getElementById('configWarningBanner');
+
+    if (badgeTierHigh) badgeTierHigh.innerHTML = `High Scores (&ge;${highThreshold}%)`;
+    if (badgeTierMid) badgeTierMid.innerHTML = `Mid Scores (${midThreshold}&ndash;${highThreshold - 1}%)`;
+    if (badgeTierLow) badgeTierLow.innerHTML = `Growth Focus (&lt;${midThreshold}%)`;
+    if (cfgGradeRangesHint) {
+      cfgGradeRangesHint.innerHTML = `High &ge; ${highThreshold}%, Mid ${midThreshold}&ndash;${highThreshold - 1}%, Growth &lt; ${midThreshold}%.`;
+    }
 
     if (lblTierHighAch && lblTierHighImp) {
       lblTierHighAch.textContent = high.targetAch;
@@ -358,7 +385,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const maxSum = (cfg.maxAchievements ?? 4) + (cfg.maxImprovements ?? 4);
       const total = cfg.totalComments ?? 6;
 
-      if (minSum > total) {
+      if (midThreshold >= highThreshold) {
+        configWarningBanner.textContent = `Warning: The Growth Focus cutoff (${midThreshold}%) must be lower than the High Score cutoff (${highThreshold}%).`;
+        configWarningBanner.style.display = 'block';
+      } else if (minSum > total) {
         configWarningBanner.textContent = `Note: Minimum strengths (${cfg.minAchievements}) + minimum growth (${cfg.minImprovements}) = ${minSum}, which exceeds the total comments target (${total}). The generator will allocate ${minSum} comments.`;
         configWarningBanner.style.display = 'block';
       } else if (total > maxSum) {
@@ -404,26 +434,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function syncSectionRanking() {
     const available = getAvailableAssessmentSections();
-    if (!Array.isArray(state.sectionRanking)) {
-      state.sectionRanking = [];
-    }
+    const normalized = CommentEngine.normalizeSectionTiers(state.sectionRanking, available);
 
-    // Retain existing items that are still in available
-    const updated = state.sectionRanking.filter(sec => available.includes(sec));
-
-    // Append newly found available sections (except 'General' which belongs at the end)
-    available.forEach(sec => {
-      if (sec !== 'General' && !updated.includes(sec)) {
-        updated.push(sec);
+    // Filter to retain only valid available sections
+    const filtered = [];
+    normalized.forEach(tier => {
+      const validInTier = tier.filter(sec => available.includes(sec));
+      if (validInTier.length > 0) {
+        filtered.push(validInTier);
       }
     });
 
-    // Ensure 'General' is present as the final fallback
-    if (!updated.includes('General')) {
-      updated.push('General');
+    // Ensure all available are placed
+    const placed = new Set();
+    filtered.forEach(tier => tier.forEach(s => placed.add(s)));
+    available.forEach(s => {
+      if (s !== 'General' && !placed.has(s)) {
+        filtered.push([s]);
+        placed.add(s);
+      }
+    });
+    if (!placed.has('General')) {
+      filtered.push(['General']);
     }
 
-    state.sectionRanking = updated;
+    state.sectionRanking = filtered;
     renderSectionRankingUI();
   }
 
@@ -437,106 +472,193 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    const tiers = state.sectionRanking;
+    const totalTiers = tiers.length;
+
+    // Breadcrumb: e.g. Priority: SAQ > MCQ = Extended Response > General
+    const breadcrumbText = tiers.map(tier => Array.isArray(tier) ? tier.join(' = ') : tier).join(' > ');
     if (breadcrumb) {
-      breadcrumb.textContent = `Priority: ${state.sectionRanking.join(' > ')}`;
+      breadcrumb.textContent = `Priority: ${breadcrumbText || 'General'}`;
     }
 
     container.innerHTML = '';
 
-    state.sectionRanking.forEach((sec, idx) => {
-      const isFirst = idx === 0;
-      const isLast = idx === state.sectionRanking.length - 1;
-      const isLastResort = isLast || sec === 'General';
+    tiers.forEach((tier, tierIdx) => {
+      const isFirstTier = tierIdx === 0;
+      const isLastTier = tierIdx === totalTiers - 1;
+      const isEqualTier = tier.length > 1;
+      const isGeneralTier = tier.length === 1 && tier[0] === 'General';
 
-      const achCount = commentBank.getAchievementsBySection(sec).length;
-      const impCount = commentBank.getImprovementsBySection(sec).length;
-      const totalCount = achCount + impCount;
+      const tierGroup = document.createElement('div');
+      tierGroup.className = 'ranking-tier-group';
+      tierGroup.setAttribute('data-tier-idx', tierIdx);
 
-      const item = document.createElement('div');
-      item.className = 'section-ranking-item draggable-rank-item';
-      item.setAttribute('draggable', 'true');
-      item.setAttribute('data-idx', idx);
+      const levelNumber = tierIdx + 1;
+      const levelTitleText = isFirstTier
+        ? `Level 1 (Top Priority)`
+        : (isGeneralTier ? `Level ${levelNumber} (Fallback)` : `Level ${levelNumber}`);
 
-      const rankBadgeClass = isLastResort ? 'ranking-badge-order last-resort' : 'ranking-badge-order';
-      const rankText = isFirst ? '#1 (Top Priority)' : (isLastResort && sec === 'General' ? 'Fallback' : `#${idx + 1}`);
+      const equalBadgeHtml = isEqualTier
+        ? `<span class="ranking-tier-equal-badge">= Equal Priority (${tier.length} Sections)</span>`
+        : '';
 
-      item.innerHTML = `
-        <div class="ranking-info-group">
-          <span class="ranking-drag-handle" title="Drag to reorder section priority">⋮⋮</span>
-          <span class="${rankBadgeClass}">${idx + 1}</span>
-          <div style="display: flex; flex-direction: column;">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <span class="ranking-section-name">${sec}</span>
-              <span class="ranking-section-tag">${rankText}</span>
-            </div>
-            <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 1px;">
-              ${totalCount} bank comments (${achCount} strengths, ${impCount} growth)
-            </span>
+      tierGroup.innerHTML = `
+        <div class="ranking-tier-header">
+          <div class="ranking-tier-title-wrap">
+            <span class="ranking-badge-order ${isGeneralTier ? 'last-resort' : ''}">${levelNumber}</span>
+            <span class="ranking-tier-title">${levelTitleText}</span>
+            ${equalBadgeHtml}
+          </div>
+          <div class="ranking-actions">
+            <button type="button" class="btn-rank-move btn-tier-up" data-tier="${tierIdx}" ${isFirstTier ? 'disabled' : ''} title="Move Level ${levelNumber} Up">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 15l7-7 7 7"></path></svg>
+              <span>Move Level Up</span>
+            </button>
+            <button type="button" class="btn-rank-move btn-tier-down" data-tier="${tierIdx}" ${isLastTier ? 'disabled' : ''} title="Move Level ${levelNumber} Down">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"></path></svg>
+              <span>Move Level Down</span>
+            </button>
           </div>
         </div>
-        <div class="ranking-actions">
-          <button type="button" class="btn-rank-move btn-rank-up" data-idx="${idx}" ${isFirst ? 'disabled' : ''} title="Increase priority">
-            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 15l7-7 7 7"></path></svg>
-            <span>Move Up</span>
-          </button>
-          <button type="button" class="btn-rank-move btn-rank-down" data-idx="${idx}" ${isLast ? 'disabled' : ''} title="Decrease priority">
-            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"></path></svg>
-            <span>Move Down</span>
-          </button>
-        </div>
+        <div class="ranking-tier-items"></div>
       `;
 
-      container.appendChild(item);
+      const itemsContainer = tierGroup.querySelector('.ranking-tier-items');
+
+      tier.forEach((sec, secIdx) => {
+        const achCount = commentBank.getAchievementsBySection(sec).length;
+        const impCount = commentBank.getImprovementsBySection(sec).length;
+        const totalCount = achCount + impCount;
+
+        const item = document.createElement('div');
+        item.className = 'section-ranking-item';
+        item.setAttribute('data-tier-idx', tierIdx);
+        item.setAttribute('data-sec-idx', secIdx);
+
+        // Action controls
+        const canLinkAbove = tierIdx > 0;
+        const canLinkBelow = tierIdx < totalTiers - 1;
+        const canSeparate = tier.length > 1;
+
+        let actionsHtml = '';
+
+        if (canSeparate) {
+          actionsHtml += `
+            <button type="button" class="btn-rank-action btn-rank-split" data-tier="${tierIdx}" data-sec="${secIdx}" title="Make '${sec}' its own independent priority level">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 7h8M8 12h8M8 17h8"></path></svg>
+              <span>Separate Level</span>
+            </button>
+          `;
+        }
+
+        if (canLinkAbove) {
+          actionsHtml += `
+            <button type="button" class="btn-rank-action btn-rank-link btn-link-above" data-tier="${tierIdx}" data-sec="${secIdx}" title="Place '${sec}' on same equal priority level as Level ${tierIdx} (=)">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 10l7-7m0 0l7 7m-7-7v18"></path></svg>
+              <span>Link with Above (=)</span>
+            </button>
+          `;
+        }
+
+        if (canLinkBelow) {
+          actionsHtml += `
+            <button type="button" class="btn-rank-action btn-rank-link btn-link-below" data-tier="${tierIdx}" data-sec="${secIdx}" title="Place '${sec}' on same equal priority level as Level ${tierIdx + 2} (=)">
+              <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 14l-7 7m0 0l-7-7m7 7V3"></path></svg>
+              <span>Link with Below (=)</span>
+            </button>
+          `;
+        }
+
+        item.innerHTML = `
+          <div class="ranking-info-group">
+            <div style="display: flex; flex-direction: column;">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span class="ranking-section-name">${sec}</span>
+                <span class="ranking-section-tag">${sec === 'General' ? 'Fallback' : (isEqualTier ? 'Equal Preference' : 'Sequential')}</span>
+              </div>
+              <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 2px;">
+                ${totalCount} bank comments (${achCount} strengths, ${impCount} growth)
+              </span>
+            </div>
+          </div>
+          <div class="ranking-actions">
+            ${actionsHtml}
+          </div>
+        `;
+
+        itemsContainer.appendChild(item);
+      });
+
+      container.appendChild(tierGroup);
     });
 
-    // Move Up handler
-    container.querySelectorAll('.btn-rank-up').forEach(btn => {
+    // Wire Move Level Up / Down handlers
+    container.querySelectorAll('.btn-tier-up').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const idx = parseInt(e.currentTarget.getAttribute('data-idx'), 10);
-        if (idx > 0) {
-          const item = state.sectionRanking.splice(idx, 1)[0];
-          state.sectionRanking.splice(idx - 1, 0, item);
+        const tierIdx = parseInt(e.currentTarget.getAttribute('data-tier'), 10);
+        if (tierIdx > 0) {
+          const moved = state.sectionRanking.splice(tierIdx, 1)[0];
+          state.sectionRanking.splice(tierIdx - 1, 0, moved);
           renderSectionRankingUI();
           triggerAutoSave();
         }
       });
     });
 
-    // Move Down handler
-    container.querySelectorAll('.btn-rank-down').forEach(btn => {
+    container.querySelectorAll('.btn-tier-down').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const idx = parseInt(e.currentTarget.getAttribute('data-idx'), 10);
-        if (idx < state.sectionRanking.length - 1) {
-          const item = state.sectionRanking.splice(idx, 1)[0];
-          state.sectionRanking.splice(idx + 1, 0, item);
+        const tierIdx = parseInt(e.currentTarget.getAttribute('data-tier'), 10);
+        if (tierIdx < state.sectionRanking.length - 1) {
+          const moved = state.sectionRanking.splice(tierIdx, 1)[0];
+          state.sectionRanking.splice(tierIdx + 1, 0, moved);
           renderSectionRankingUI();
           triggerAutoSave();
         }
       });
     });
 
-    // Drag and drop handlers
-    let draggedRankIdx = null;
-    container.querySelectorAll('.draggable-rank-item').forEach(el => {
-      el.addEventListener('dragstart', (e) => {
-        draggedRankIdx = parseInt(e.currentTarget.getAttribute('data-idx'), 10);
-        e.currentTarget.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
+    // Wire Link with Above (=)
+    container.querySelectorAll('.btn-link-above').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const tierIdx = parseInt(e.currentTarget.getAttribute('data-tier'), 10);
+        const secIdx = parseInt(e.currentTarget.getAttribute('data-sec'), 10);
+        if (tierIdx > 0) {
+          const [sec] = state.sectionRanking[tierIdx].splice(secIdx, 1);
+          state.sectionRanking[tierIdx - 1].push(sec);
+          if (state.sectionRanking[tierIdx].length === 0) {
+            state.sectionRanking.splice(tierIdx, 1);
+          }
+          renderSectionRankingUI();
+          triggerAutoSave();
+        }
       });
-      el.addEventListener('dragend', (e) => {
-        e.currentTarget.classList.remove('dragging');
-        draggedRankIdx = null;
+    });
+
+    // Wire Link with Below (=)
+    container.querySelectorAll('.btn-link-below').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const tierIdx = parseInt(e.currentTarget.getAttribute('data-tier'), 10);
+        const secIdx = parseInt(e.currentTarget.getAttribute('data-sec'), 10);
+        if (tierIdx < state.sectionRanking.length - 1) {
+          const [sec] = state.sectionRanking[tierIdx].splice(secIdx, 1);
+          state.sectionRanking[tierIdx + 1].unshift(sec);
+          if (state.sectionRanking[tierIdx].length === 0) {
+            state.sectionRanking.splice(tierIdx, 1);
+          }
+          renderSectionRankingUI();
+          triggerAutoSave();
+        }
       });
-      el.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-      });
-      el.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const targetIdx = parseInt(e.currentTarget.getAttribute('data-idx'), 10);
-        if (draggedRankIdx !== null && targetIdx !== draggedRankIdx) {
-          const [moved] = state.sectionRanking.splice(draggedRankIdx, 1);
-          state.sectionRanking.splice(targetIdx, 0, moved);
+    });
+
+    // Wire Separate Level
+    container.querySelectorAll('.btn-rank-split').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const tierIdx = parseInt(e.currentTarget.getAttribute('data-tier'), 10);
+        const secIdx = parseInt(e.currentTarget.getAttribute('data-sec'), 10);
+        if (state.sectionRanking[tierIdx].length > 1) {
+          const [sec] = state.sectionRanking[tierIdx].splice(secIdx, 1);
+          state.sectionRanking.splice(tierIdx + 1, 0, [sec]);
           renderSectionRankingUI();
           triggerAutoSave();
         }
@@ -575,17 +697,27 @@ document.addEventListener('DOMContentLoaded', () => {
       let maxImp = parseInt(cfgMaxImp.value, 10);
       if (isNaN(maxImp) || maxImp < minImp) maxImp = minImp;
 
+      let highThresh = parseInt(cfgHighThreshold ? cfgHighThreshold.value : 70, 10);
+      if (isNaN(highThresh) || highThresh < 1) highThresh = 70;
+      if (highThresh > 100) highThresh = 100;
+
+      let midThresh = parseInt(cfgMidThreshold ? cfgMidThreshold.value : 50, 10);
+      if (isNaN(midThresh) || midThresh < 0) midThresh = 0;
+      if (midThresh > 99) midThresh = 99;
+
       state.generationConfig.totalComments = total;
       state.generationConfig.minAchievements = minAch;
       state.generationConfig.maxAchievements = maxAch;
       state.generationConfig.minImprovements = minImp;
       state.generationConfig.maxImprovements = maxImp;
+      state.generationConfig.highThreshold = highThresh;
+      state.generationConfig.midThreshold = midThresh;
 
       updateConfigPreview();
       triggerAutoSave();
     };
 
-    [cfgTotalComments, cfgMinAch, cfgMaxAch, cfgMinImp, cfgMaxImp].forEach(inp => {
+    [cfgTotalComments, cfgMinAch, cfgMaxAch, cfgMinImp, cfgMaxImp, cfgHighThreshold, cfgMidThreshold].forEach(inp => {
       if (inp) {
         inp.addEventListener('change', onNumChange);
         inp.addEventListener('input', onNumChange);
@@ -1253,8 +1385,8 @@ document.addEventListener('DOMContentLoaded', () => {
           selectedSheet: 'SAC 1 Matrices',
           questions: demoQuestions,
           students: demoStudents,
-          sectionRanking: ['SAQ', 'MCQ', 'General'],
-          generationConfig: { totalComments: 4, minAchievements: 2, maxAchievements: 3, minImprovements: 1, maxImprovements: 2 },
+          sectionRanking: [['SAQ'], ['MCQ'], ['General']],
+          generationConfig: { totalComments: 4, minAchievements: 2, maxAchievements: 3, minImprovements: 1, maxImprovements: 2, highThreshold: 70, midThreshold: 50 },
           commentBank: demoBank,
           generatedComments: demoComments,
           currentStep: 4,
@@ -2329,7 +2461,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const total = studentsToProcess.length;
     const startTime = Date.now();
-    const rankingDisplay = (state.sectionRanking && state.sectionRanking.length > 0) ? state.sectionRanking.join(' > ') : 'General';
+    const rankingDisplay = (state.sectionRanking && state.sectionRanking.length > 0)
+      ? state.sectionRanking.map(tier => Array.isArray(tier) ? tier.join(' = ') : tier).join(' > ')
+      : 'General';
 
     if (progressStatusText) progressStatusText.textContent = `Applying section priority ranking (${rankingDisplay})...`;
 

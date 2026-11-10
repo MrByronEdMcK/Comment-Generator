@@ -455,7 +455,7 @@ class CommentEngine {
   }
 
   /**
-   * Compute dynamic sentence distribution based on percentage and config
+   * Compute dynamic sentence distribution based on percentage and config (with customizable thresholds)
    */
   static getTargetDistribution(pct, config = {}) {
     const total = parseInt(config.totalComments, 10) || 6;
@@ -464,10 +464,17 @@ class CommentEngine {
     const minImp = parseInt(config.minImprovements, 10) !== undefined ? parseInt(config.minImprovements, 10) : 2;
     const maxImp = parseInt(config.maxImprovements, 10) !== undefined ? parseInt(config.maxImprovements, 10) : 4;
 
+    const highThreshold = config.highThreshold !== undefined && !isNaN(parseInt(config.highThreshold, 10))
+      ? parseInt(config.highThreshold, 10)
+      : 70;
+    const midThreshold = config.midThreshold !== undefined && !isNaN(parseInt(config.midThreshold, 10))
+      ? parseInt(config.midThreshold, 10)
+      : 50;
+
     let targetAch;
-    if (pct >= 70) {
+    if (pct >= highThreshold) {
       targetAch = Math.min(maxAch, total - minImp);
-    } else if (pct < 50) {
+    } else if (pct < midThreshold) {
       targetAch = Math.max(minAch, total - maxImp);
     } else {
       targetAch = Math.round(total / 2);
@@ -477,6 +484,46 @@ class CommentEngine {
     const targetImp = Math.max(minImp, Math.min(maxImp, total - targetAch));
 
     return { targetAch, targetImp, total: targetAch + targetImp };
+  }
+
+  /**
+   * Helper: Normalize section priority ranking into tiers (Array<Array<string>>).
+   * Supports:
+   * - Tiered arrays: [['SAQ'], ['MCQ', 'Extended Response'], ['General']]
+   * - Flat string arrays: ['SAQ', 'MCQ', 'General']
+   * - Equality-joined strings: ['SAQ', 'MCQ = Extended Response', 'General']
+   */
+  static normalizeSectionTiers(sectionRanking = [], validSections = []) {
+    const tiers = [];
+    if (Array.isArray(sectionRanking)) {
+      sectionRanking.forEach(entry => {
+        if (Array.isArray(entry)) {
+          const sub = entry.map(s => String(s).trim()).filter(Boolean);
+          if (sub.length > 0) tiers.push(sub);
+        } else if (typeof entry === 'string') {
+          const parts = entry.split('=').map(s => s.trim()).filter(Boolean);
+          if (parts.length > 0) tiers.push(parts);
+        }
+      });
+    }
+
+    const placedSections = new Set();
+    tiers.forEach(tier => tier.forEach(sec => placedSections.add(sec)));
+
+    (validSections || []).forEach(sec => {
+      const s = String(sec).trim();
+      if (s && s !== 'General' && !placedSections.has(s)) {
+        tiers.push([s]);
+        placedSections.add(s);
+      }
+    });
+
+    if (!placedSections.has('General')) {
+      tiers.push(['General']);
+      placedSections.add('General');
+    }
+
+    return tiers;
   }
 
   /**
@@ -569,7 +616,7 @@ class CommentEngine {
     const pct = analysis.scoreSummary.percentage;
     const { targetAch, targetImp } = CommentEngine.getTargetDistribution(pct, config);
 
-    // Build active ranking list (ensuring 'General' is at the end if not explicitly positioned)
+    // Build active ranking tiers (normalizing equal-priority tiers and ensuring 'General' is the fallback)
     const validSections = new Set();
     analysis.validQuestions.forEach(q => {
       if (q.section && q.section !== 'General') validSections.add(q.section);
@@ -581,24 +628,24 @@ class CommentEngine {
       if (i.section && i.section !== 'General') validSections.add(i.section);
     });
 
-    let ranking = Array.isArray(sectionRanking) ? sectionRanking.filter(Boolean) : [];
-    // Ensure all active sections are in ranking
-    validSections.forEach(sec => {
-      if (!ranking.includes(sec)) ranking.push(sec);
+    const tiers = CommentEngine.normalizeSectionTiers(sectionRanking, Array.from(validSections));
+
+    // Flatten all distinct section names to establish comment candidate buckets
+    const allSections = [];
+    tiers.forEach(tier => {
+      tier.forEach(sec => {
+        if (!allSections.includes(sec)) allSections.push(sec);
+      });
     });
-    // Ensure 'General' is in ranking as the final fallback
-    if (!ranking.includes('General')) {
-      ranking.push('General');
-    }
 
     // Parse all comments from bank
     const parsedAchievements = (commentBank?.achievements || []).map(CommentEngine.parseCommentEntry);
     const parsedImprovements = (commentBank?.improvements || []).map(CommentEngine.parseCommentEntry);
 
-    // Group candidates by section according to ranking
+    // Group candidates by section
     const achBySection = {};
     const impBySection = {};
-    ranking.forEach(sec => {
+    allSections.forEach(sec => {
       achBySection[sec] = [];
       impBySection[sec] = [];
     });
@@ -625,7 +672,7 @@ class CommentEngine {
           if (matchPct >= 50) {
             // Assign to matched question's section
             const targetSec = matched[0].section || a.section || 'General';
-            const bucketKey = ranking.find(r => CommentEngine.isSectionMatch(targetSec, r)) || 'General';
+            const bucketKey = allSections.find(r => CommentEngine.isSectionMatch(targetSec, r)) || 'General';
             if (!achBySection[bucketKey]) achBySection[bucketKey] = [];
             achBySection[bucketKey].push({ text: a.text, pct: matchPct, isQuestion: true });
           }
@@ -633,7 +680,7 @@ class CommentEngine {
       } else if (a.section && a.section !== 'General') {
         const secStats = analysis.sectionScores[a.section];
         if (secStats && secStats.mastered) {
-          const bucketKey = ranking.find(r => CommentEngine.isSectionMatch(a.section, r)) || 'General';
+          const bucketKey = allSections.find(r => CommentEngine.isSectionMatch(a.section, r)) || 'General';
           if (!achBySection[bucketKey]) achBySection[bucketKey] = [];
           achBySection[bucketKey].push({ text: a.text, pct: secStats.pct, isQuestion: false });
         }
@@ -663,7 +710,7 @@ class CommentEngine {
           const matchPct = max > 0 ? (obtained / max) * 100 : 0;
           if (matchPct < 50) {
             const targetSec = matched[0].section || i.section || 'General';
-            const bucketKey = ranking.find(r => CommentEngine.isSectionMatch(targetSec, r)) || 'General';
+            const bucketKey = allSections.find(r => CommentEngine.isSectionMatch(targetSec, r)) || 'General';
             if (!impBySection[bucketKey]) impBySection[bucketKey] = [];
             impBySection[bucketKey].push({ text: i.text, pct: matchPct, isQuestion: true });
           }
@@ -671,7 +718,7 @@ class CommentEngine {
       } else if (i.section && i.section !== 'General') {
         const secStats = analysis.sectionScores[i.section];
         if (secStats && !secStats.mastered) {
-          const bucketKey = ranking.find(r => CommentEngine.isSectionMatch(i.section, r)) || 'General';
+          const bucketKey = allSections.find(r => CommentEngine.isSectionMatch(i.section, r)) || 'General';
           if (!impBySection[bucketKey]) impBySection[bucketKey] = [];
           impBySection[bucketKey].push({ text: i.text, pct: secStats.pct, isQuestion: false });
         }
@@ -681,28 +728,25 @@ class CommentEngine {
       }
     });
 
-    // Sort items within each section bucket (question-specific first, highest mastery for ach, lowest for imp)
-    Object.keys(achBySection).forEach(k => {
-      achBySection[k].sort((a, b) => {
-        if (a.isQuestion !== b.isQuestion) return a.isQuestion ? -1 : 1;
-        return b.pct - a.pct;
-      });
-    });
-
-    Object.keys(impBySection).forEach(k => {
-      impBySection[k].sort((a, b) => {
-        if (a.isQuestion !== b.isQuestion) return a.isQuestion ? -1 : 1;
-        return a.pct - b.pct;
-      });
-    });
-
-    // 3. Staged Selection Following Section Priority Order
+    // 3. Staged Selection Following Section Priority Tiers (Equal priority sections pooled together)
     const selectedAch = [];
     const seenAchNorms = new Set();
 
-    for (const secName of ranking) {
+    for (const tier of tiers) {
       if (selectedAch.length >= targetAch) break;
-      const pool = achBySection[secName] || [];
+      const pool = [];
+      tier.forEach(secName => {
+        if (achBySection[secName]) {
+          pool.push(...achBySection[secName]);
+        }
+      });
+
+      // Sort candidate items in this tier: question-specific first, then highest mastery percentage
+      pool.sort((a, b) => {
+        if (a.isQuestion !== b.isQuestion) return a.isQuestion ? -1 : 1;
+        return b.pct - a.pct;
+      });
+
       for (const item of pool) {
         if (selectedAch.length >= targetAch) break;
         const norm = CommentEngine.normalizeText(item.text);
@@ -716,9 +760,21 @@ class CommentEngine {
     const selectedImp = [];
     const seenImpNorms = new Set();
 
-    for (const secName of ranking) {
+    for (const tier of tiers) {
       if (selectedImp.length >= targetImp) break;
-      const pool = impBySection[secName] || [];
+      const pool = [];
+      tier.forEach(secName => {
+        if (impBySection[secName]) {
+          pool.push(...impBySection[secName]);
+        }
+      });
+
+      // Sort candidate items in this tier: question-specific first, then lowest mastery percentage
+      pool.sort((a, b) => {
+        if (a.isQuestion !== b.isQuestion) return a.isQuestion ? -1 : 1;
+        return a.pct - b.pct;
+      });
+
       for (const item of pool) {
         if (selectedImp.length >= targetImp) break;
         const norm = CommentEngine.normalizeText(item.text);
