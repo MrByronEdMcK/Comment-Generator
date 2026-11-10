@@ -656,15 +656,18 @@ class CommentEngine {
       if (i.section && i.section !== 'General') validSections.add(i.section);
     });
 
-    const tiers = CommentEngine.normalizeSectionTiers(sectionRanking, Array.from(validSections));
+    const normalizedTiers = CommentEngine.normalizeSectionTiers(sectionRanking, Array.from(validSections));
 
     // Flatten all distinct section names to establish comment candidate buckets
     const allSections = [];
-    tiers.forEach(tier => {
+    normalizedTiers.forEach(tier => {
       tier.forEach(sec => {
         if (!allSections.includes(sec)) allSections.push(sec);
       });
     });
+
+    // If section priority is explicitly disabled via toggle, pool all sections into equal priority (single tier)
+    const tiers = (config.enableSectionPriority === false) ? [allSections] : normalizedTiers;
 
     // Parse all comments from bank
     const parsedAchievements = (commentBank?.achievements || []).map(CommentEngine.parseCommentEntry);

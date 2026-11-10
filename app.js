@@ -17,11 +17,15 @@ document.addEventListener('DOMContentLoaded', () => {
     generatedComments: {}, // studentId -> commentText
     sectionRanking: [], // Order of section preference e.g. ['SAQ', 'MCQ', 'General']
     generationConfig: {
-      totalComments: 6,
-      minAchievements: 2,
-      maxAchievements: 4,
-      minImprovements: 2,
-      maxImprovements: 4
+      totalComments: 3,
+      enableScoreTiers: false,
+      enableSectionPriority: false,
+      minAchievements: 1,
+      maxAchievements: 3,
+      minImprovements: 1,
+      maxImprovements: 2,
+      highThreshold: 70,
+      midThreshold: 50
     },
     isGenerating: false,
     currentStep: 1
@@ -259,6 +263,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const cfgEnableScoreTiers = document.getElementById('cfgEnableScoreTiers');
   const cfgScoreTiersStatusBadge = document.getElementById('cfgScoreTiersStatusBadge');
   const advancedScoreSettingsContainer = document.getElementById('advancedScoreSettingsContainer');
+  const cfgEnableSectionPriority = document.getElementById('cfgEnableSectionPriority');
+  const cfgSectionPriorityStatusBadge = document.getElementById('cfgSectionPriorityStatusBadge');
+  const sectionPriorityBoardContainer = document.getElementById('sectionPriorityBoardContainer');
+  const sectionRankingBreadcrumb = document.getElementById('sectionRankingBreadcrumb');
   const cfgMinAch = document.getElementById('cfgMinAch');
   const cfgMaxAch = document.getElementById('cfgMaxAch');
   const cfgMinImp = document.getElementById('cfgMinImp');
@@ -275,11 +283,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const cfg = state.generationConfig || {};
     const total = cfg.totalComments ?? 3;
     const isScoreTiers = cfg.enableScoreTiers === true;
+    const isSecPriority = cfg.enableSectionPriority === true;
 
+    const secPart = isSecPriority ? ' • Section-Prioritized' : '';
     if (!isScoreTiers) {
       const ach = Math.max(1, Math.ceil(total / 2));
       const imp = Math.max(1, total - ach);
-      configSummaryBadge.textContent = `${total} Comments per student (${ach} Str, ${imp} Gro) • Uniform Allocation`;
+      configSummaryBadge.textContent = `${total} Comments per student (${ach} Str, ${imp} Gro) • Uniform${secPart}`;
       return;
     }
 
@@ -289,7 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const maxImp = cfg.maxImprovements ?? 2;
     const high = cfg.highThreshold ?? 70;
     const mid = cfg.midThreshold ?? 50;
-    configSummaryBadge.textContent = `${total} Comments (${minAch}-${maxAch} Str, ${minImp}-${maxImp} Gro) • Score-Differentiated (≥${high}% / <${mid}%)`;
+    configSummaryBadge.textContent = `${total} Comments (${minAch}-${maxAch} Str, ${minImp}-${maxImp} Gro) • Score-Differentiated (≥${high}% / <${mid}%)${secPart}`;
   }
 
   function toggleGenerationConfigCard(forceOpen) {
@@ -329,10 +339,24 @@ document.addEventListener('DOMContentLoaded', () => {
       cfgEnableScoreTiers.checked = isScoreTiers;
     }
     if (cfgScoreTiersStatusBadge) {
-      cfgScoreTiersStatusBadge.textContent = isScoreTiers ? 'On (Differentiated)' : 'Off (Uniform)';
+      cfgScoreTiersStatusBadge.textContent = isScoreTiers ? 'On' : 'Off';
     }
     if (advancedScoreSettingsContainer) {
       advancedScoreSettingsContainer.style.display = isScoreTiers ? 'block' : 'none';
+    }
+
+    const isSectionPriority = cfg.enableSectionPriority === true;
+    if (cfgEnableSectionPriority) {
+      cfgEnableSectionPriority.checked = isSectionPriority;
+    }
+    if (cfgSectionPriorityStatusBadge) {
+      cfgSectionPriorityStatusBadge.textContent = isSectionPriority ? 'On' : 'Off';
+    }
+    if (sectionPriorityBoardContainer) {
+      sectionPriorityBoardContainer.style.display = isSectionPriority ? 'block' : 'none';
+    }
+    if (sectionRankingBreadcrumb) {
+      sectionRankingBreadcrumb.style.display = isSectionPriority ? 'inline-flex' : 'none';
     }
 
     if (cfgMinAch) cfgMinAch.value = cfg.minAchievements ?? 1;
@@ -520,6 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const breadcrumbText = tiers.map(tier => Array.isArray(tier) ? tier.join(' = ') : tier).join(' > ');
     if (breadcrumb) {
       breadcrumb.textContent = `Priority: ${breadcrumbText || 'General'}`;
+      breadcrumb.style.display = (state.generationConfig.enableSectionPriority === true) ? 'inline-flex' : 'none';
     }
 
     board.innerHTML = '';
@@ -820,13 +845,32 @@ document.addEventListener('DOMContentLoaded', () => {
       cfgEnableScoreTiers.addEventListener('change', () => {
         state.generationConfig.enableScoreTiers = cfgEnableScoreTiers.checked;
         if (cfgScoreTiersStatusBadge) {
-          cfgScoreTiersStatusBadge.textContent = cfgEnableScoreTiers.checked ? 'On (Differentiated)' : 'Off (Uniform)';
+          cfgScoreTiersStatusBadge.textContent = cfgEnableScoreTiers.checked ? 'On' : 'Off';
         }
         if (advancedScoreSettingsContainer) {
           advancedScoreSettingsContainer.style.display = cfgEnableScoreTiers.checked ? 'block' : 'none';
         }
         updateConfigSummaryBadge();
         updateConfigPreview();
+        triggerAutoSave();
+      });
+    }
+
+    if (cfgEnableSectionPriority) {
+      cfgEnableSectionPriority.addEventListener('change', () => {
+        const isEnabled = cfgEnableSectionPriority.checked;
+        state.generationConfig.enableSectionPriority = isEnabled;
+        if (cfgSectionPriorityStatusBadge) {
+          cfgSectionPriorityStatusBadge.textContent = isEnabled ? 'On' : 'Off';
+        }
+        if (sectionPriorityBoardContainer) {
+          sectionPriorityBoardContainer.style.display = isEnabled ? 'block' : 'none';
+        }
+        if (sectionRankingBreadcrumb) {
+          sectionRankingBreadcrumb.style.display = isEnabled ? 'inline-flex' : 'none';
+        }
+        updateConfigSummaryBadge();
+        renderSectionRankingUI();
         triggerAutoSave();
       });
     }
@@ -1390,7 +1434,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (stepNum === 1) updateStep1UploadUI();
     if (stepNum === 2) renderStep2Questions();
     if (stepNum === 3) renderStep3CommentBank();
-    if (stepNum === 4) renderStep4Dashboard();
+    if (stepNum === 4) {
+      renderStep4Dashboard();
+      setTimeout(autoResizeAllCommentBoxes, 50);
+    }
 
     updateHeaderContext();
     triggerAutoSave();
@@ -1536,7 +1583,7 @@ document.addEventListener('DOMContentLoaded', () => {
           questions: demoQuestions,
           students: demoStudents,
           sectionRanking: [['SAQ', 'MCQ', 'General']],
-          generationConfig: { totalComments: 3, enableScoreTiers: false, minAchievements: 1, maxAchievements: 3, minImprovements: 1, maxImprovements: 2, highThreshold: 70, midThreshold: 50 },
+          generationConfig: { totalComments: 3, enableScoreTiers: false, enableSectionPriority: false, minAchievements: 1, maxAchievements: 3, minImprovements: 1, maxImprovements: 2, highThreshold: 70, midThreshold: 50 },
           commentBank: demoBank,
           generatedComments: demoComments,
           currentStep: 4,
@@ -2477,12 +2524,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Event listeners for comment editing & single student regeneration / clearing
     document.querySelectorAll('.student-comment-input').forEach(txt => {
-      txt.style.height = 'auto';
-      txt.style.height = Math.max(180, txt.scrollHeight) + 'px';
+      autoResizeCommentTextarea(txt);
 
       txt.addEventListener('input', (e) => {
-        e.target.style.height = 'auto';
-        e.target.style.height = Math.max(180, e.target.scrollHeight) + 'px';
+        autoResizeCommentTextarea(e.target);
       });
 
       txt.addEventListener('change', (e) => {
@@ -2491,6 +2536,8 @@ document.addEventListener('DOMContentLoaded', () => {
         triggerAutoSave();
       });
     });
+
+    requestAnimationFrame(() => autoResizeAllCommentBoxes());
 
     document.querySelectorAll('.btn-copy-comment').forEach(b => {
       b.addEventListener('click', (e) => {
@@ -2511,7 +2558,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const txt = document.querySelector(`.student-comment-input[data-id="${id}"]`);
         if (txt) {
           txt.value = '';
-          txt.style.height = '180px';
+          autoResizeCommentTextarea(txt);
         }
         triggerAutoSave();
       });
@@ -2522,6 +2569,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const id = e.target.getAttribute('data-id');
         const student = state.students.find(s => s.id === id);
         if (!student) return;
+
+        // Minimise generation settings upon generating
+        toggleGenerationConfigCard(false);
 
         b.innerHTML = '<span>Regenerating...</span>';
         b.disabled = true;
@@ -2544,6 +2594,19 @@ document.addEventListener('DOMContentLoaded', () => {
           b.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg> <span>Regenerate</span>';
         }
       });
+    });
+  }
+
+  function autoResizeCommentTextarea(txt) {
+    if (!txt) return;
+    txt.style.height = 'auto';
+    const targetHeight = Math.max(120, txt.scrollHeight + 8);
+    txt.style.height = `${targetHeight}px`;
+  }
+
+  function autoResizeAllCommentBoxes() {
+    document.querySelectorAll('.student-comment-input').forEach(txt => {
+      autoResizeCommentTextarea(txt);
     });
   }
 
@@ -2583,6 +2646,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Helper to run batch generation for a list of students
   function runBatchGeneration(studentsToProcess) {
     if (!studentsToProcess || studentsToProcess.length === 0) return;
+
+    // Minimise generation settings upon generating
+    toggleGenerationConfigCard(false);
 
     state.isGenerating = true;
 
