@@ -47,11 +47,11 @@ class CommentEngine {
       return false;
     }
 
-    // Check section letters e.g. "Section A" vs "Section B"
-    const cSecLetter = cNorm.match(/\bsection\s+([a-z0-9]+)\b/i);
-    const qSecLetter = qNorm.match(/\bsection\s+([a-z0-9]+)\b/i);
-    if (cSecLetter && qSecLetter) {
-      return cSecLetter[1].toLowerCase() === qSecLetter[1].toLowerCase();
+    // Check section letters/numbers e.g. "Section A" vs "Section B", "Part 1" vs "Part 2"
+    const cSecId = cNorm.match(/\b(section|part)\s+([a-z0-9]+)\b/i);
+    const qSecId = qNorm.match(/\b(section|part)\s+([a-z0-9]+)\b/i);
+    if (cSecId && qSecId && cSecId[1].toLowerCase() === qSecId[1].toLowerCase()) {
+      return cSecId[2].toLowerCase() === qSecId[2].toLowerCase();
     }
 
     // Check substring match
@@ -470,10 +470,14 @@ class CommentEngine {
     }
 
     const total = parseInt(config.totalComments, 10) || 6;
-    const minAch = parseInt(config.minAchievements, 10) !== undefined ? parseInt(config.minAchievements, 10) : 1;
-    const maxAch = parseInt(config.maxAchievements, 10) !== undefined ? parseInt(config.maxAchievements, 10) : 4;
-    const minImp = parseInt(config.minImprovements, 10) !== undefined ? parseInt(config.minImprovements, 10) : 1;
-    const maxImp = parseInt(config.maxImprovements, 10) !== undefined ? parseInt(config.maxImprovements, 10) : 4;
+    const parsedMinAch = parseInt(config.minAchievements, 10);
+    const parsedMaxAch = parseInt(config.maxAchievements, 10);
+    const parsedMinImp = parseInt(config.minImprovements, 10);
+    const parsedMaxImp = parseInt(config.maxImprovements, 10);
+    const minAch = !isNaN(parsedMinAch) ? parsedMinAch : 1;
+    const maxAch = !isNaN(parsedMaxAch) ? parsedMaxAch : 4;
+    const minImp = !isNaN(parsedMinImp) ? parsedMinImp : 1;
+    const maxImp = !isNaN(parsedMaxImp) ? parsedMaxImp : 4;
 
     const highThreshold = config.highThreshold !== undefined && !isNaN(parseInt(config.highThreshold, 10))
       ? parseInt(config.highThreshold, 10)
@@ -681,6 +685,23 @@ class CommentEngine {
       impBySection[sec] = [];
     });
 
+    const resolveBucketKey = (targetSec) => {
+      if (!targetSec) return 'General';
+      const targetLower = String(targetSec).trim().toLowerCase();
+      const exact = allSections.find(r => r.toLowerCase() === targetLower);
+      if (exact) return exact;
+      return allSections.find(r => CommentEngine.isSectionMatch(targetSec, r)) || 'General';
+    };
+
+    const getSectionStats = (sectionName) => {
+      if (!sectionName || sectionName === 'General') return null;
+      if (analysis.sectionScores[sectionName]) return analysis.sectionScores[sectionName];
+      const matchedKey = Object.keys(analysis.sectionScores).find(
+        k => CommentEngine.isSectionMatch(sectionName, k, false)
+      );
+      return matchedKey ? analysis.sectionScores[matchedKey] : null;
+    };
+
     // 1. Partition qualifying Achievements into section buckets
     parsedAchievements.forEach(a => {
       const isTagged = Array.isArray(a.questionIds) && a.questionIds.length > 0;
@@ -696,22 +717,24 @@ class CommentEngine {
           let max = 0;
           matched.forEach(q => {
             const qScore = CommentEngine.getQuestionScore(student, q);
-            obtained += (qScore !== undefined && qScore !== null && !isNaN(Number(qScore))) ? parseFloat(qScore) : 0;
+            if (qScore !== undefined && qScore !== null && qScore !== '' && !isNaN(Number(qScore))) {
+              obtained += parseFloat(qScore);
+            }
             max += q.maxMarks || 1;
           });
           const matchPct = max > 0 ? (obtained / max) * 100 : 0;
           if (matchPct >= 50) {
             // Assign to matched question's section
             const targetSec = matched[0].section || a.section || 'General';
-            const bucketKey = allSections.find(r => CommentEngine.isSectionMatch(targetSec, r)) || 'General';
+            const bucketKey = resolveBucketKey(targetSec);
             if (!achBySection[bucketKey]) achBySection[bucketKey] = [];
             achBySection[bucketKey].push({ text: a.text, pct: matchPct, isQuestion: true });
           }
         }
       } else if (a.section && a.section !== 'General') {
-        const secStats = analysis.sectionScores[a.section];
+        const secStats = getSectionStats(a.section);
         if (secStats && secStats.mastered) {
-          const bucketKey = allSections.find(r => CommentEngine.isSectionMatch(a.section, r)) || 'General';
+          const bucketKey = resolveBucketKey(a.section);
           if (!achBySection[bucketKey]) achBySection[bucketKey] = [];
           achBySection[bucketKey].push({ text: a.text, pct: secStats.pct, isQuestion: false });
         }
@@ -735,21 +758,23 @@ class CommentEngine {
           let max = 0;
           matched.forEach(q => {
             const qScore = CommentEngine.getQuestionScore(student, q);
-            obtained += (qScore !== undefined && qScore !== null && !isNaN(Number(qScore))) ? parseFloat(qScore) : 0;
+            if (qScore !== undefined && qScore !== null && qScore !== '' && !isNaN(Number(qScore))) {
+              obtained += parseFloat(qScore);
+            }
             max += q.maxMarks || 1;
           });
           const matchPct = max > 0 ? (obtained / max) * 100 : 0;
           if (matchPct < 50) {
             const targetSec = matched[0].section || i.section || 'General';
-            const bucketKey = allSections.find(r => CommentEngine.isSectionMatch(targetSec, r)) || 'General';
+            const bucketKey = resolveBucketKey(targetSec);
             if (!impBySection[bucketKey]) impBySection[bucketKey] = [];
             impBySection[bucketKey].push({ text: i.text, pct: matchPct, isQuestion: true });
           }
         }
       } else if (i.section && i.section !== 'General') {
-        const secStats = analysis.sectionScores[i.section];
+        const secStats = getSectionStats(i.section);
         if (secStats && !secStats.mastered) {
-          const bucketKey = allSections.find(r => CommentEngine.isSectionMatch(i.section, r)) || 'General';
+          const bucketKey = resolveBucketKey(i.section);
           if (!impBySection[bucketKey]) impBySection[bucketKey] = [];
           impBySection[bucketKey].push({ text: i.text, pct: secStats.pct, isQuestion: false });
         }
@@ -782,119 +807,81 @@ class CommentEngine {
       });
     }
 
-    // 3. Staged Selection Following Section Priority Tiers (Equal priority sections pooled together)
-    // Comments are selected at random from the possible/qualifying candidates for each student,
-    // rather than always taking the first available comment.
-    const selectedAch = [];
-    const seenAchNorms = new Set();
+    // 3. Staged Selection Following Section Priority Tiers
+    // If a tier yields 3 or fewer candidate comments (<= 3), comments from the next priority tier(s)
+    // are made available in the random selection pool until > 3 candidates exist or tiers are exhausted.
+    const selectFromTiers = (bySectionMap, targetCount, forbiddenNorms = null) => {
+      const selected = [];
+      const seenNorms = new Set();
+      if (targetCount <= 0) return { selected, seenNorms };
 
-    for (const tier of tiers) {
-      if (selectedAch.length >= targetAch) break;
-      const pool = [];
-      tier.forEach(secName => {
-        if (achBySection[secName]) {
-          pool.push(...achBySection[secName]);
+      let tierIdx = 0;
+      while (tierIdx < tiers.length && selected.length < targetCount) {
+        const available = [];
+        const localSeen = new Set();
+
+        const appendTier = (tier) => {
+          tier.forEach(secName => {
+            const bucket = bySectionMap[secName] || [];
+            for (const item of bucket) {
+              const norm = CommentEngine.normalizeText(item.text);
+              if (
+                norm &&
+                !seenNorms.has(norm) &&
+                (!forbiddenNorms || !forbiddenNorms.has(norm)) &&
+                !localSeen.has(norm)
+              ) {
+                localSeen.add(norm);
+                available.push(item);
+              }
+            }
+          });
+        };
+
+        appendTier(tiers[tierIdx]);
+
+        while (available.length <= 3 && tierIdx + 1 < tiers.length) {
+          tierIdx++;
+          appendTier(tiers[tierIdx]);
         }
-      });
 
-      // Filter to unique candidate items not yet selected
-      const available = [];
-      const localSeen = new Set();
-      for (const item of pool) {
-        const norm = CommentEngine.normalizeText(item.text);
-        if (norm && !seenAchNorms.has(norm) && !localSeen.has(norm)) {
-          localSeen.add(norm);
-          available.push(item);
-        }
-      }
+        const qCandidates = available.filter(i => i.isQuestion);
+        const gCandidates = available.filter(i => !i.isQuestion);
 
-      // Group into question-specific and general/section candidate pools
-      const qCandidates = available.filter(i => i.isQuestion);
-      const gCandidates = available.filter(i => !i.isQuestion);
+        const unusedQ = qCandidates.filter(c => !previousNorms.has(CommentEngine.normalizeText(c.text)));
+        const usedQ = qCandidates.filter(c => previousNorms.has(CommentEngine.normalizeText(c.text)));
+        const shuffledQ = [...shuffleArray(unusedQ), ...shuffleArray(usedQ)];
 
-      // Prioritize candidates not previously used if regenerating, then shuffle
-      const unusedQ = qCandidates.filter(c => !previousNorms.has(CommentEngine.normalizeText(c.text)));
-      const usedQ = qCandidates.filter(c => previousNorms.has(CommentEngine.normalizeText(c.text)));
-      const shuffledQ = [...shuffleArray(unusedQ), ...shuffleArray(usedQ)];
-
-      for (const item of shuffledQ) {
-        if (selectedAch.length >= targetAch) break;
-        const norm = CommentEngine.normalizeText(item.text);
-        seenAchNorms.add(norm);
-        selectedAch.push(item.text);
-      }
-
-      // If more achievements are needed to reach target, select from general/section candidates
-      if (selectedAch.length < targetAch && gCandidates.length > 0) {
-        const unusedG = gCandidates.filter(c => !previousNorms.has(CommentEngine.normalizeText(c.text)));
-        const usedG = gCandidates.filter(c => previousNorms.has(CommentEngine.normalizeText(c.text)));
-        const shuffledG = [...shuffleArray(unusedG), ...shuffleArray(usedG)];
-
-        for (const item of shuffledG) {
-          if (selectedAch.length >= targetAch) break;
+        for (const item of shuffledQ) {
+          if (selected.length >= targetCount) break;
           const norm = CommentEngine.normalizeText(item.text);
-          if (!seenAchNorms.has(norm)) {
-            seenAchNorms.add(norm);
-            selectedAch.push(item.text);
+          seenNorms.add(norm);
+          selected.push(item.text);
+        }
+
+        if (selected.length < targetCount && gCandidates.length > 0) {
+          const unusedG = gCandidates.filter(c => !previousNorms.has(CommentEngine.normalizeText(c.text)));
+          const usedG = gCandidates.filter(c => previousNorms.has(CommentEngine.normalizeText(c.text)));
+          const shuffledG = [...shuffleArray(unusedG), ...shuffleArray(usedG)];
+
+          for (const item of shuffledG) {
+            if (selected.length >= targetCount) break;
+            const norm = CommentEngine.normalizeText(item.text);
+            if (!seenNorms.has(norm) && (!forbiddenNorms || !forbiddenNorms.has(norm))) {
+              seenNorms.add(norm);
+              selected.push(item.text);
+            }
           }
         }
-      }
-    }
 
-    const selectedImp = [];
-    const seenImpNorms = new Set();
-
-    for (const tier of tiers) {
-      if (selectedImp.length >= targetImp) break;
-      const pool = [];
-      tier.forEach(secName => {
-        if (impBySection[secName]) {
-          pool.push(...impBySection[secName]);
-        }
-      });
-
-      // Filter to unique candidate items not yet selected and not contradicting achievements
-      const available = [];
-      const localSeen = new Set();
-      for (const item of pool) {
-        const norm = CommentEngine.normalizeText(item.text);
-        if (norm && !seenImpNorms.has(norm) && !seenAchNorms.has(norm) && !localSeen.has(norm)) {
-          localSeen.add(norm);
-          available.push(item);
-        }
+        tierIdx++;
       }
 
-      const qCandidates = available.filter(i => i.isQuestion);
-      const gCandidates = available.filter(i => !i.isQuestion);
+      return { selected, seenNorms };
+    };
 
-      // Prioritize candidates not previously used if regenerating, then shuffle
-      const unusedQ = qCandidates.filter(c => !previousNorms.has(CommentEngine.normalizeText(c.text)));
-      const usedQ = qCandidates.filter(c => previousNorms.has(CommentEngine.normalizeText(c.text)));
-      const shuffledQ = [...shuffleArray(unusedQ), ...shuffleArray(usedQ)];
-
-      for (const item of shuffledQ) {
-        if (selectedImp.length >= targetImp) break;
-        const norm = CommentEngine.normalizeText(item.text);
-        seenImpNorms.add(norm);
-        selectedImp.push(item.text);
-      }
-
-      // If more improvements are needed to reach target, select from general/section candidates
-      if (selectedImp.length < targetImp && gCandidates.length > 0) {
-        const unusedG = gCandidates.filter(c => !previousNorms.has(CommentEngine.normalizeText(c.text)));
-        const usedG = gCandidates.filter(c => previousNorms.has(CommentEngine.normalizeText(c.text)));
-        const shuffledG = [...shuffleArray(unusedG), ...shuffleArray(usedG)];
-
-        for (const item of shuffledG) {
-          if (selectedImp.length >= targetImp) break;
-          const norm = CommentEngine.normalizeText(item.text);
-          if (!seenImpNorms.has(norm) && !seenAchNorms.has(norm)) {
-            seenImpNorms.add(norm);
-            selectedImp.push(item.text);
-          }
-        }
-      }
-    }
+    const { selected: selectedAch, seenNorms: seenAchNorms } = selectFromTiers(achBySection, targetAch);
+    const { selected: selectedImp } = selectFromTiers(impBySection, targetImp, seenAchNorms);
 
     if (selectedAch.length === 0 && selectedImp.length === 0) {
       return "";

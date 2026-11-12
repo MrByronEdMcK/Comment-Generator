@@ -1726,6 +1726,52 @@ input[type="number"].config-num-input-large,
   box-shadow: var(--shadow-md);
 }
 
+.student-comment-card.student-card-needs-review {
+  border-color: rgba(184, 115, 32, 0.55);
+  box-shadow: 0 0 0 1px rgba(184, 115, 32, 0.2), var(--shadow-sm);
+}
+
+.missing-comment-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: var(--radius-full);
+  background: var(--warning-light);
+  color: var(--warning-text);
+  border: 1px solid rgba(184, 115, 32, 0.35);
+}
+
+.missing-comments-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  background: var(--warning-light);
+  border: 1px solid rgba(184, 115, 32, 0.45);
+  color: var(--warning-text);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1.1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.86rem;
+}
+
+.missing-comments-banner-main {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex: 1;
+  min-width: 240px;
+}
+
+.missing-comments-banner-main svg {
+  flex-shrink: 0;
+  color: var(--warning);
+}
+
 .student-card-header {
   display: flex;
   justify-content: space-between;

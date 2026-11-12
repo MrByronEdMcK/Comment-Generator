@@ -1399,7 +1399,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const compassStudentCountBadge = document.getElementById('compassStudentCountBadge');
   const searchStudent = document.getElementById('searchStudent');
   const totalStudentsCount = document.getElementById('totalStudentsCount');
+  const missingCommentsBanner = document.getElementById('missingCommentsBanner');
   const studentCardsContainer = document.getElementById('studentCardsContainer');
+  let filterNeedsReviewOnly = false;
   const progressContainer = document.getElementById('progressContainer');
   const progressBarFill = document.getElementById('progressBarFill');
   const progressPercent = document.getElementById('progressPercent');
@@ -2449,23 +2451,135 @@ document.addEventListener('DOMContentLoaded', () => {
   btnGotoStep4.addEventListener('click', () => showStep(4));
 
   // --- Step 4: Comment Dashboard & Export ---
+  function getStudentCommentStatus(student, commentText, scoreSummary = null, hasAttempted = false) {
+    const summary = scoreSummary || CommentEngine.calculateStudentScoreSummary(student, state.questions);
+    if (summary.isZeroOutOfZero) {
+      return { needsManualReview: false, missingAch: false, missingImp: false, reason: '' };
+    }
+
+    const text = (commentText || '').trim();
+    if (!hasAttempted && !text) {
+      return { needsManualReview: false, missingAch: false, missingImp: false, reason: '' };
+    }
+
+    const achMatch = text.match(/Achievements:\s*([\s\S]*?)(?=(?:Improvements:|$))/i);
+    const impMatch = text.match(/Improvements:\s*([\s\S]*?)$/i);
+    const hasNonePlaceholder = /\(none qualified from bank\)/i.test(text) || /\[No (?:Achievement|Improvement) comment/i.test(text);
+    const { achievements, improvements, full } = extractFeedbackSections(text);
+
+    // Allow deliberate headerless freeform manual comments unless empty or placeholder
+    if (!achMatch && !impMatch && text && !hasNonePlaceholder && full) {
+      return { needsManualReview: false, missingAch: false, missingImp: false, reason: '' };
+    }
+
+    const missingAch = !text || !achievements.trim() || /Achievements:\s*\n*\s*\(None qualified from bank\)/i.test(text);
+    const missingImp = !text || !improvements.trim() || /Improvements:\s*\n*\s*\(None qualified from bank\)/i.test(text);
+    const needsManualReview = missingAch || missingImp;
+
+    let reason = '';
+    if (missingAch && missingImp) {
+      reason = 'No qualifying comments matched — add manually';
+    } else if (missingImp) {
+      reason = 'No improvement comments qualified — add manually';
+    } else if (missingAch) {
+      reason = 'No achievement comments qualified — add manually';
+    }
+
+    return { needsManualReview, missingAch, missingImp, reason };
+  }
+
+  function getFilteredStudentsForStep4() {
+    const q = (searchStudent ? searchStudent.value : '').toLowerCase().trim();
+    return (state.students || []).filter(student => {
+      if (q && !student.name.toLowerCase().includes(q)) return false;
+      if (filterNeedsReviewOnly) {
+        const hasAttempted = Object.prototype.hasOwnProperty.call(state.generatedComments, student.id);
+        const status = getStudentCommentStatus(student, state.generatedComments[student.id] || '', null, hasAttempted);
+        return status.needsManualReview;
+      }
+      return true;
+    });
+  }
+
+  function updateCardReviewState(card, student, commentText) {
+    if (!card || !student) return;
+    const hasAttempted = Object.prototype.hasOwnProperty.call(state.generatedComments, student.id);
+    const status = getStudentCommentStatus(student, commentText, null, hasAttempted);
+    const pillSlot = card.querySelector('.missing-comment-pill-slot');
+
+    card.classList.toggle('student-card-needs-review', status.needsManualReview);
+    if (pillSlot) {
+      pillSlot.innerHTML = status.needsManualReview
+        ? `<span class="missing-comment-pill" title="${status.reason}">⚠️ ${status.reason}</span>`
+        : '';
+    }
+  }
+
+  function updateMissingCommentsBanner() {
+    if (!missingCommentsBanner) return;
+    const flagged = (state.students || []).filter(student => {
+      const hasAttempted = Object.prototype.hasOwnProperty.call(state.generatedComments, student.id);
+      if (!hasAttempted) return false;
+      const status = getStudentCommentStatus(student, state.generatedComments[student.id] || '', null, true);
+      return status.needsManualReview;
+    });
+
+    if (flagged.length === 0) {
+      filterNeedsReviewOnly = false;
+      missingCommentsBanner.style.display = 'none';
+      missingCommentsBanner.innerHTML = '';
+      return;
+    }
+
+    const previewNames = flagged.slice(0, 5).map(s => s.name).join(', ');
+    const extraCount = flagged.length > 5 ? ` +${flagged.length - 5} more` : '';
+    const plural = flagged.length === 1 ? 'student has' : 'students have';
+
+    missingCommentsBanner.style.display = 'flex';
+    missingCommentsBanner.innerHTML = `
+      <div class="missing-comments-banner-main">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path>
+        </svg>
+        <div>
+          <strong>${flagged.length} ${plural} no qualifying comments to select</strong> (${previewNames}${extraCount}). Add a comment manually, or they will remain blank in the Compass command.
+        </div>
+      </div>
+      <button type="button" id="btnToggleReviewFilter" class="btn btn-secondary btn-sm">
+        ${filterNeedsReviewOnly ? 'Show All Students' : `Filter Needs Review (${flagged.length})`}
+      </button>
+    `;
+
+    const btnFilter = document.getElementById('btnToggleReviewFilter');
+    if (btnFilter) {
+      btnFilter.addEventListener('click', () => {
+        filterNeedsReviewOnly = !filterNeedsReviewOnly;
+        renderStudentCards(getFilteredStudentsForStep4());
+      });
+    }
+  }
+
   function renderStep4Dashboard() {
     syncSectionRanking();
     totalStudentsCount.textContent = state.students.length;
-    renderStudentCards(state.students);
+    renderStudentCards(getFilteredStudentsForStep4());
   }
 
   function renderStudentCards(studentsToRender) {
     studentCardsContainer.innerHTML = '';
+    updateMissingCommentsBanner();
+
     if (!studentsToRender || studentsToRender.length === 0) {
+      const emptyMsg = filterNeedsReviewOnly
+        ? 'All students now have comments!'
+        : 'No student records found. Upload a graded spreadsheet in Step 1 to generate comments.';
       studentCardsContainer.innerHTML = `
         <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; background: #ffffff; border-radius: var(--radius-md); border: 1px dashed var(--border-color); color: var(--text-muted);">
-          No student records found. Upload a graded spreadsheet in Step 1 to generate comments.
+          ${emptyMsg}
         </div>
       `;
       return;
     }
-    const activeQuestions = state.questions.filter(q => !q.isSectionBreak && q.included !== false);
 
     studentsToRender.forEach(student => {
       // Calculate overall score (checks against sheet Total and Percentage if present)
@@ -2482,8 +2596,13 @@ document.addEventListener('DOMContentLoaded', () => {
         state.generatedComments[student.id] = commentText;
       }
 
+      const hasAttempted = Object.prototype.hasOwnProperty.call(state.generatedComments, student.id);
+      const commentStatus = getStudentCommentStatus(student, commentText, scoreSummary, hasAttempted);
+
       const card = document.createElement('div');
-      card.className = 'student-comment-card';
+      card.className = commentStatus.needsManualReview
+        ? 'student-comment-card student-card-needs-review'
+        : 'student-comment-card';
 
       let bandStyle = 'background: var(--bg-subtle); color: var(--text-muted);';
       if (isZeroOutOfZero) {
@@ -2498,11 +2617,16 @@ document.addEventListener('DOMContentLoaded', () => {
         bandStyle = 'background: var(--terracotta-light); color: var(--terracotta-text); border: 1px solid rgba(192, 86, 56, 0.3);';
       }
 
+      const missingPillHtml = commentStatus.needsManualReview
+        ? `<span class="missing-comment-pill" title="${commentStatus.reason}">⚠️ ${commentStatus.reason}</span>`
+        : '';
+
       card.innerHTML = `
         <div class="student-card-header">
           <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
             <span class="student-name">${student.name}</span>
             <span class="tag-pill" style="${bandStyle} font-weight: 700;">${band}</span>
+            <span class="missing-comment-pill-slot">${missingPillHtml}</span>
           </div>
           <div class="student-score-badge">
             Score: ${totalObtained} / ${totalMax} (${isZeroOutOfZero ? '0%' : pct + '%'})
@@ -2536,11 +2660,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
       txt.addEventListener('input', () => {
         autoResizeCommentTextarea(txt);
+        const id = txt.getAttribute('data-id');
+        state.generatedComments[id] = txt.value;
+        const student = state.students.find(s => String(s.id) === String(id));
+        updateCardReviewState(txt.closest('.student-comment-card'), student, txt.value);
+        updateMissingCommentsBanner();
       });
 
       txt.addEventListener('change', () => {
         const id = txt.getAttribute('data-id');
         state.generatedComments[id] = txt.value;
+        const student = state.students.find(s => String(s.id) === String(id));
+        updateCardReviewState(txt.closest('.student-comment-card'), student, txt.value);
+        updateMissingCommentsBanner();
         triggerAutoSave();
       });
     });
@@ -2563,11 +2695,15 @@ document.addEventListener('DOMContentLoaded', () => {
       b.addEventListener('click', () => {
         const id = b.getAttribute('data-id');
         delete state.generatedComments[id];
+        const card = b.closest('.student-comment-card');
         const txt = document.querySelector(`.student-comment-input[data-id="${id}"]`);
         if (txt) {
           txt.value = '';
           autoResizeCommentTextarea(txt);
         }
+        const student = state.students.find(s => String(s.id) === String(id));
+        updateCardReviewState(card, student, '');
+        updateMissingCommentsBanner();
         triggerAutoSave();
       });
     });
@@ -2607,6 +2743,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 1200);
           }
 
+          updateCardReviewState(card, student, comment);
+          updateMissingCommentsBanner();
           triggerAutoSave();
 
           b.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"></path></svg> <span>Regenerated!</span>';
@@ -2656,17 +2794,16 @@ document.addEventListener('DOMContentLoaded', () => {
       if (Object.keys(state.generatedComments).length === 0) return;
       if (confirm('Are you sure you want to clear all generated comments for all students?')) {
         state.generatedComments = {};
-        renderStudentCards(state.students);
+        filterNeedsReviewOnly = false;
+        renderStudentCards(getFilteredStudentsForStep4());
         triggerAutoSave();
       }
     });
   }
 
   // Search filter handler
-  searchStudent.addEventListener('input', (e) => {
-    const q = e.target.value.toLowerCase().trim();
-    const filtered = state.students.filter(s => s.name.toLowerCase().includes(q));
-    renderStudentCards(filtered);
+  searchStudent.addEventListener('input', () => {
+    renderStudentCards(getFilteredStudentsForStep4());
   });
 
   // Helper to run batch generation for a list of students
@@ -2710,6 +2847,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (progressStatusText) progressStatusText.textContent = `Applying section priority ranking (${rankingDisplay})...`;
 
     let processed = 0;
+    let missingReviewCount = 0;
     for (let i = 0; i < total; i++) {
       if (!state.isGenerating) {
         break;
@@ -2718,6 +2856,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const comment = CommentEngine.generateCommentsForStudent(student, activeQuestions, commentBank, config, state.sectionRanking);
       state.generatedComments[student.id] = comment;
       processed++;
+
+      const status = getStudentCommentStatus(student, comment, null, true);
+      if (status.needsManualReview) missingReviewCount++;
 
       const pctDone = Math.round(((i + 1) / total) * 100);
       if (progressBarFill) progressBarFill.style.width = `${pctDone}%`;
@@ -2734,11 +2875,15 @@ document.addEventListener('DOMContentLoaded', () => {
       if (progressEstTime) progressEstTime.textContent = 'Stopped';
     } else {
       if (progressStudentName) progressStudentName.textContent = 'Comments Generated Successfully';
-      if (progressStatusText) progressStatusText.textContent = `Generated comments for ${processed} student(s) using section priority.`;
+      if (progressStatusText) {
+        progressStatusText.textContent = missingReviewCount > 0
+          ? `Generated comments for ${processed} student(s). ⚠️ ${missingReviewCount} student(s) had no qualifying comments and need manual review.`
+          : `Generated comments for ${processed} student(s).`;
+      }
       if (progressEstTime) progressEstTime.textContent = 'Complete';
     }
 
-    renderStudentCards(state.students);
+    renderStudentCards(getFilteredStudentsForStep4());
     triggerAutoSave();
 
     state.isGenerating = false;
@@ -2887,6 +3032,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const commentText = generatedComments[student.id] || '';
 
       const { achievements, improvements, full } = extractFeedbackSections(commentText);
+      const status = getStudentCommentStatus(student, commentText, summary, true);
+      const requiresManualReview = !summary.isZeroOutOfZero && status.needsManualReview;
 
       let fields = [];
       if (format === 'band_ach_imp') {
@@ -2903,6 +3050,12 @@ document.addEventListener('DOMContentLoaded', () => {
         fields = [band, achievements, improvements];
       }
 
+      // If no comments qualified for Achievements/Improvements and user didn't add one manually,
+      // leave every field for this student completely blank so Compass flags them for manual review.
+      if (requiresManualReview) {
+        fields = fields.map(() => '');
+      }
+
       const cleanName = (student.name || '').replace(/[\t\r\n]+/g, ' ').trim();
       const cleanFields = fields.map(f => (f || '').replace(/\r\n/g, '\n').trim());
 
@@ -2910,6 +3063,8 @@ document.addEventListener('DOMContentLoaded', () => {
         originalName: cleanName,
         name: cleanName.toLowerCase(),
         fields: cleanFields,
+        requiresManualReview,
+        missingReason: status.reason || '',
         processed: false
       };
     });
@@ -3103,8 +3258,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         
         if (student) {
-            console.log(\`\\n👨🎓 Processing: \${gridName}...\`);
             student.processed = true; // Mark as successfully found
+            
+            if (student.requiresManualReview) {
+                console.warn(\`\\n📝 Skipping \${gridName} — left completely blank (\${student.missingReason || 'missing comments'}) for manual review.\`);
+                continue;
+            }
+            
+            console.log(\`\\n👨🎓 Processing: \${gridName}...\`);
             
             const rowElement = nameCell.closest('.ag-row');
             const rowIndex = rowElement.getAttribute('row-index');
@@ -3126,11 +3287,19 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 5. FINAL FEEDBACK & SUMMARY
     const missingStudents = studentsData.filter(s => !s.processed);
+    const manualReviewStudents = studentsData.filter(s => s.requiresManualReview);
     
     console.log(\`\\n========================================\`);
     console.log(\`🎉 Script finished. Processed \${updatedCount} students.\`);
     
     let alertMsg = \`✅ Script finished!\\n\\nProcessed: \${updatedCount} students in the grid.\`;
+    
+    if (manualReviewStudents.length > 0) {
+        console.warn(\`📝 Left \${manualReviewStudents.length} student(s) completely blank for manual comment review:\`);
+        manualReviewStudents.forEach(s => console.warn(\`- \${s.originalName}: \${s.missingReason || 'Add comment manually'}\`));
+        
+        alertMsg += \`\\n\\n📝 MANUAL REVIEW: \${manualReviewStudents.length} student(s) were left blank because no comments qualified (see console).\`;
+    }
     
     if (missingStudents.length > 0) {
         console.warn(\`⚠️ The following \${missingStudents.length} students from your data were NOT found on the screen:\`);
@@ -3159,7 +3328,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (compassStudentCountBadge) {
       const count = state.students.length;
-      compassStudentCountBadge.textContent = `${count} student${count === 1 ? '' : 's'} included`;
+      const activeQuestions = (state.questions || []).filter(q => !q.isSectionBreak && q.included !== false);
+      const blankCount = state.students.filter(student => {
+        const summary = CommentEngine.calculateStudentScoreSummary(student, activeQuestions);
+        if (summary.isZeroOutOfZero) return false;
+        const status = getStudentCommentStatus(student, state.generatedComments[student.id] || '', summary, true);
+        return status.needsManualReview;
+      }).length;
+      const baseText = `${count} student${count === 1 ? '' : 's'} included`;
+      compassStudentCountBadge.textContent = blankCount > 0
+        ? `${baseText} (${blankCount} left blank for review)`
+        : baseText;
     }
   }
 
