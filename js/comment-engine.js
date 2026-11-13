@@ -36,20 +36,36 @@ class CommentEngine {
 
     if (cNorm === qNorm) return true;
 
-    // Check mutually exclusive section tokens (e.g. MCQ vs SAQ)
-    const tokensA = new Set(cNorm.split(/[\s\-_,.:;/\\\\]+/).filter(Boolean));
-    const tokensB = new Set(qNorm.split(/[\s\-_,.:;/\\\\]+/).filter(Boolean));
-
-    const isMcq = (toks) => toks.has('mcq') || (toks.has('multiple') && toks.has('choice'));
-    const isSaq = (toks) => toks.has('saq') || (toks.has('short') && toks.has('answer')) || toks.has('extended');
-
-    if ((isMcq(tokensA) && isSaq(tokensB)) || (isSaq(tokensA) && isMcq(tokensB))) {
-      return false;
-    }
-
     // Check section letters/numbers e.g. "Section A" vs "Section B", "Part 1" vs "Part 2"
     const cSecId = cNorm.match(/\b(section|part)\s+([a-z0-9]+)\b/i);
     const qSecId = qNorm.match(/\b(section|part)\s+([a-z0-9]+)\b/i);
+    if (cSecId && qSecId && cSecId[1].toLowerCase() === qSecId[1].toLowerCase()) {
+      if (cSecId[2].toLowerCase() !== qSecId[2].toLowerCase()) {
+        return false;
+      }
+    }
+
+    // Check canonical section types (MCQ vs SAQ vs ER) so aliases match cleanly and distinct types stay isolated
+    const tokensA = new Set(cNorm.split(/[\s\-_,.:;/\\\\]+/).filter(Boolean));
+    const tokensB = new Set(qNorm.split(/[\s\-_,.:;/\\\\]+/).filter(Boolean));
+
+    const isMcq = (toks) => toks.has('mcq') || toks.has('mc') || (toks.has('multiple') && toks.has('choice'));
+    const isSaq = (toks) => toks.has('saq') || toks.has('sa') || (toks.has('short') && toks.has('answer'));
+    const isEr = (toks, raw) => toks.has('er') || (toks.has('extended') && (toks.has('response') || toks.has('answer') || toks.has('writing'))) || raw === 'extended';
+
+    const getCanonicalType = (toks, raw) => {
+      if (isMcq(toks)) return 'mcq';
+      if (isSaq(toks)) return 'saq';
+      if (isEr(toks, raw)) return 'er';
+      return null;
+    };
+
+    const typeA = getCanonicalType(tokensA, cNorm);
+    const typeB = getCanonicalType(tokensB, qNorm);
+    if (typeA && typeB) {
+      return typeA === typeB;
+    }
+
     if (cSecId && qSecId && cSecId[1].toLowerCase() === qSecId[1].toLowerCase()) {
       return cSecId[2].toLowerCase() === qSecId[2].toLowerCase();
     }
@@ -679,10 +695,14 @@ class CommentEngine {
 
     // Group candidates by section
     const achBySection = {};
-    const impBySection = {};
+    const impPrimaryBySection = {};
+    const impPartialBySection = {};
+    const impFallbackBySection = {};
     allSections.forEach(sec => {
       achBySection[sec] = [];
-      impBySection[sec] = [];
+      impPrimaryBySection[sec] = [];
+      impPartialBySection[sec] = [];
+      impFallbackBySection[sec] = [];
     });
 
     const resolveBucketKey = (targetSec) => {
@@ -701,6 +721,10 @@ class CommentEngine {
       );
       return matchedKey ? analysis.sectionScores[matchedKey] : null;
     };
+
+    const buildMatchedKeys = (matchedList) => matchedList.map(
+      q => `${(q.section || 'General').trim().toLowerCase()}::${String(q.id || q.title || '').trim().toLowerCase()}`
+    );
 
     // 1. Partition qualifying Achievements into section buckets
     parsedAchievements.forEach(a => {
@@ -728,7 +752,12 @@ class CommentEngine {
             const targetSec = matched[0].section || a.section || 'General';
             const bucketKey = resolveBucketKey(targetSec);
             if (!achBySection[bucketKey]) achBySection[bucketKey] = [];
-            achBySection[bucketKey].push({ text: a.text, pct: matchPct, isQuestion: true });
+            achBySection[bucketKey].push({
+              text: a.text,
+              pct: matchPct,
+              isQuestion: true,
+              matchedKeys: buildMatchedKeys(matched)
+            });
           }
         }
       } else if (a.section && a.section !== 'General') {
@@ -736,15 +765,18 @@ class CommentEngine {
         if (secStats && secStats.mastered) {
           const bucketKey = resolveBucketKey(a.section);
           if (!achBySection[bucketKey]) achBySection[bucketKey] = [];
-          achBySection[bucketKey].push({ text: a.text, pct: secStats.pct, isQuestion: false });
+          achBySection[bucketKey].push({ text: a.text, pct: secStats.pct, isQuestion: false, matchedKeys: [] });
         }
       } else if (a.isGeneral) {
         if (!achBySection['General']) achBySection['General'] = [];
-        achBySection['General'].push({ text: a.text, pct: 100, isQuestion: false });
+        achBySection['General'].push({ text: a.text, pct: 100, isQuestion: false, matchedKeys: [] });
       }
     });
 
-    // 2. Partition qualifying Improvements into section buckets
+    // 2. Partition qualifying Improvements into section buckets:
+    //    - impPrimaryBySection: strictly < 50% on tagged questions
+    //    - impPartialBySection: 50% <= pct < 100% (partial marks lost) as secondary question fallback
+    //    - impFallbackBySection: unmastered section-level & General improvements as last resort
     parsedImprovements.forEach(i => {
       const isTagged = Array.isArray(i.questionIds) && i.questionIds.length > 0;
       if (isTagged) {
@@ -756,31 +788,49 @@ class CommentEngine {
         if (matched.length > 0) {
           let obtained = 0;
           let max = 0;
+          let numericMatched = 0;
           matched.forEach(q => {
             const qScore = CommentEngine.getQuestionScore(student, q);
             if (qScore !== undefined && qScore !== null && qScore !== '' && !isNaN(Number(qScore))) {
               obtained += parseFloat(qScore);
+              numericMatched++;
             }
             max += q.maxMarks || 1;
           });
+          if (numericMatched === 0) return;
           const matchPct = max > 0 ? (obtained / max) * 100 : 0;
           if (matchPct < 50) {
             const targetSec = matched[0].section || i.section || 'General';
             const bucketKey = resolveBucketKey(targetSec);
-            if (!impBySection[bucketKey]) impBySection[bucketKey] = [];
-            impBySection[bucketKey].push({ text: i.text, pct: matchPct, isQuestion: true });
+            if (!impPrimaryBySection[bucketKey]) impPrimaryBySection[bucketKey] = [];
+            impPrimaryBySection[bucketKey].push({
+              text: i.text,
+              pct: matchPct,
+              isQuestion: true,
+              matchedKeys: buildMatchedKeys(matched)
+            });
+          } else if (max > 0 && obtained < max && matchPct < 100) {
+            const targetSec = matched[0].section || i.section || 'General';
+            const bucketKey = resolveBucketKey(targetSec);
+            if (!impPartialBySection[bucketKey]) impPartialBySection[bucketKey] = [];
+            impPartialBySection[bucketKey].push({
+              text: i.text,
+              pct: matchPct,
+              isQuestion: true,
+              matchedKeys: buildMatchedKeys(matched)
+            });
           }
         }
       } else if (i.section && i.section !== 'General') {
         const secStats = getSectionStats(i.section);
         if (secStats && !secStats.mastered) {
           const bucketKey = resolveBucketKey(i.section);
-          if (!impBySection[bucketKey]) impBySection[bucketKey] = [];
-          impBySection[bucketKey].push({ text: i.text, pct: secStats.pct, isQuestion: false });
+          if (!impFallbackBySection[bucketKey]) impFallbackBySection[bucketKey] = [];
+          impFallbackBySection[bucketKey].push({ text: i.text, pct: secStats.pct, isQuestion: false, matchedKeys: [] });
         }
       } else if (i.isGeneral) {
-        if (!impBySection['General']) impBySection['General'] = [];
-        impBySection['General'].push({ text: i.text, pct: 0, isQuestion: false });
+        if (!impFallbackBySection['General']) impFallbackBySection['General'] = [];
+        impFallbackBySection['General'].push({ text: i.text, pct: 0, isQuestion: false, matchedKeys: [] });
       }
     });
 
@@ -807,13 +857,19 @@ class CommentEngine {
       });
     }
 
+    const orderCandidates = (candidates) => {
+      const unused = candidates.filter(c => !previousNorms.has(CommentEngine.normalizeText(c.text)));
+      const used = candidates.filter(c => previousNorms.has(CommentEngine.normalizeText(c.text)));
+      return [...shuffleArray(unused), ...shuffleArray(used)];
+    };
+
     // 3. Staged Selection Following Section Priority Tiers
     // If a tier yields 3 or fewer candidate comments (<= 3), comments from the next priority tier(s)
     // are made available in the random selection pool until > 3 candidates exist or tiers are exhausted.
-    const selectFromTiers = (bySectionMap, targetCount, forbiddenNorms = null) => {
-      const selected = [];
-      const seenNorms = new Set();
-      if (targetCount <= 0) return { selected, seenNorms };
+    const fillFromTiers = (bySectionMap, targetCount, stateObj, options = {}) => {
+      const { forbiddenNorms = null, preferFullFirst = false, avoidKeys = null } = options;
+      const { selected, seenNorms, selectedKeys } = stateObj;
+      if (targetCount <= 0 || selected.length >= targetCount) return;
 
       let tierIdx = 0;
       while (tierIdx < tiers.length && selected.length < targetCount) {
@@ -848,23 +904,34 @@ class CommentEngine {
         const qCandidates = available.filter(i => i.isQuestion);
         const gCandidates = available.filter(i => !i.isQuestion);
 
-        const unusedQ = qCandidates.filter(c => !previousNorms.has(CommentEngine.normalizeText(c.text)));
-        const usedQ = qCandidates.filter(c => previousNorms.has(CommentEngine.normalizeText(c.text)));
-        const shuffledQ = [...shuffleArray(unusedQ), ...shuffleArray(usedQ)];
+        let orderedQ;
+        if (preferFullFirst) {
+          const fullQ = qCandidates.filter(i => i.pct >= 100);
+          const partialQ = qCandidates.filter(i => i.pct < 100);
+          orderedQ = [...orderCandidates(fullQ), ...orderCandidates(partialQ)];
+        } else if (avoidKeys && avoidKeys.size > 0) {
+          const nonOverlapping = qCandidates.filter(
+            i => !(i.matchedKeys || []).some(k => avoidKeys.has(k))
+          );
+          const overlapping = qCandidates.filter(
+            i => (i.matchedKeys || []).some(k => avoidKeys.has(k))
+          );
+          orderedQ = [...orderCandidates(nonOverlapping), ...orderCandidates(overlapping)];
+        } else {
+          orderedQ = orderCandidates(qCandidates);
+        }
 
-        for (const item of shuffledQ) {
+        for (const item of orderedQ) {
           if (selected.length >= targetCount) break;
           const norm = CommentEngine.normalizeText(item.text);
+          if (seenNorms.has(norm) || (forbiddenNorms && forbiddenNorms.has(norm))) continue;
           seenNorms.add(norm);
           selected.push(item.text);
+          (item.matchedKeys || []).forEach(k => selectedKeys.add(k));
         }
 
         if (selected.length < targetCount && gCandidates.length > 0) {
-          const unusedG = gCandidates.filter(c => !previousNorms.has(CommentEngine.normalizeText(c.text)));
-          const usedG = gCandidates.filter(c => previousNorms.has(CommentEngine.normalizeText(c.text)));
-          const shuffledG = [...shuffleArray(unusedG), ...shuffleArray(usedG)];
-
-          for (const item of shuffledG) {
+          for (const item of orderCandidates(gCandidates)) {
             if (selected.length >= targetCount) break;
             const norm = CommentEngine.normalizeText(item.text);
             if (!seenNorms.has(norm) && (!forbiddenNorms || !forbiddenNorms.has(norm))) {
@@ -876,12 +943,25 @@ class CommentEngine {
 
         tierIdx++;
       }
-
-      return { selected, seenNorms };
     };
 
-    const { selected: selectedAch, seenNorms: seenAchNorms } = selectFromTiers(achBySection, targetAch);
-    const { selected: selectedImp } = selectFromTiers(impBySection, targetImp, seenAchNorms);
+    const achState = { selected: [], seenNorms: new Set(), selectedKeys: new Set() };
+    fillFromTiers(achBySection, targetAch, achState, { preferFullFirst: true });
+
+    const impState = { selected: [], seenNorms: new Set(), selectedKeys: new Set() };
+    fillFromTiers(impPrimaryBySection, targetImp, impState, { forbiddenNorms: achState.seenNorms });
+    if (impState.selected.length < targetImp) {
+      fillFromTiers(impPartialBySection, targetImp, impState, {
+        forbiddenNorms: achState.seenNorms,
+        avoidKeys: achState.selectedKeys
+      });
+    }
+    if (impState.selected.length < targetImp) {
+      fillFromTiers(impFallbackBySection, targetImp, impState, { forbiddenNorms: achState.seenNorms });
+    }
+
+    const selectedAch = achState.selected;
+    const selectedImp = impState.selected;
 
     if (selectedAch.length === 0 && selectedImp.length === 0) {
       return "";
