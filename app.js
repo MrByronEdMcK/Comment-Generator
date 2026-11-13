@@ -3117,43 +3117,129 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log(\`✅ Single Task (\${activeTaskId}) confirmed. Found \${taskColumns.length} columns to fill.\`);
 
     // 3. HYBRID AUTOMATION EDITOR
+    function isElementVisible(el) {
+        if (!el || !el.isConnected) return false;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) return false;
+        const rect = el.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return false;
+        if (rect.right < 0 || rect.bottom < 0 || rect.left > window.innerWidth + 100 || rect.top > window.innerHeight + 100) return false;
+        return true;
+    }
+
+    function normalizeMultiline(val) {
+        return String(val || '')
+            .replace(/\\r\\n/g, '\\n')
+            .split('\\n')
+            .map(line => line.trim())
+            .filter(Boolean)
+            .join('\\n')
+            .toLowerCase();
+    }
+
+    function normalizeSingleLine(val) {
+        return String(val || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+    }
+
+    function findModalSaveCloseButton(modalRoot, allowCloseOnly = false) {
+        const root = modalRoot || document;
+        const rawCandidates = Array.from(root.querySelectorAll('button, .x-btn, a[role="button"], span.x-btn-inner'));
+        const deduped = [];
+        const seenClickable = new Set();
+
+        for (const el of rawCandidates) {
+            if (!isElementVisible(el)) continue;
+            const clickable = el.closest('a, button, .x-btn') || el;
+            if (!isElementVisible(clickable) || seenClickable.has(clickable)) continue;
+            const label = (clickable.innerText || clickable.textContent || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+            if (!label) continue;
+            // NEVER click "Save and Next" / "Save & Next" or any "Next" button
+            if (label.includes('next')) continue;
+            seenClickable.add(clickable);
+            deduped.push({ el: clickable, label });
+        }
+
+        const saveAndClose = deduped.find(b => b.label.includes('save') && b.label.includes('close'));
+        if (saveAndClose) return saveAndClose.el;
+
+        const saveOnly = deduped.find(b => b.label === 'save' || (b.label.includes('save') && !b.label.includes('cancel') && !b.label.includes('reset')));
+        if (saveOnly) return saveOnly.el;
+
+        if (allowCloseOnly) {
+            const closeBtn = deduped.find(b => b.label === 'close' || b.label === 'cancel' || b.label.includes('close'));
+            if (closeBtn) return closeBtn.el;
+        }
+        return null;
+    }
+
+    async function waitForModalToClose(modalInput, maxWaitMs = 900) {
+        const start = Date.now();
+        while (Date.now() - start < maxWaitMs) {
+            if (!isElementVisible(modalInput)) return true;
+            await new Promise(r => setTimeout(r, 80));
+        }
+        return !isElementVisible(modalInput);
+    }
+
     async function editCell(cell, value, colName, studentName) {
         if (!cell) {
             console.warn(\`⚠️ Cell for [\${colName}] not found in DOM for \${studentName}.\`);
             return;
         }
         if (value === undefined || value === '') return;
-        
-        // --- SKIP CHECK ---
+
+        const cleanValue = String(value || '').replace(/\\r\\n/g, '\\n').trim();
+        const targetSingle = normalizeSingleLine(cleanValue);
+
+        // --- PRE-CLICK SKIP CHECK ---
         const existingText = (cell.innerText || cell.textContent || "").trim();
-        const cleanValue = String(value || '').trim();
-        
-        // If the cell already has this exact data, skip it instantly!
-        if (existingText.toLowerCase() === cleanValue.toLowerCase()) {
-            console.log(\`⏩ Skipping [\${colName}] for \${studentName} - Data already matches.\`);
+        if (existingText && normalizeSingleLine(existingText) === targetSingle) {
+            console.log(\`⏩ Skipping [\${colName}] for \${studentName} - Cell data already matches.\`);
             return;
         }
-        
+
         cell.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-        await new Promise(r => setTimeout(r, 150)); 
-        
+        await new Promise(r => setTimeout(r, 150));
+
         console.log(\`🖱️ Clicking [\${colName}] for \${studentName}...\`);
-        
+
         // Trigger cell edit
         cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
         cell.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
         cell.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
         cell.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window }));
-        
+
         await new Promise(r => setTimeout(r, 400)); // Give UI time to render modal/input
-        
-        const textareas = Array.from(document.querySelectorAll('textarea')).filter(ta => ta.getBoundingClientRect().width > 0);
-        const modalInput = textareas[textareas.length - 1]; 
-        
+
+        // Only detect TRULY visible modal textareas outside the grid cell (ignores hidden/closed ExtJS dialogs)
+        const visibleModalTextareas = Array.from(document.querySelectorAll('textarea'))
+            .filter(ta => !cell.contains(ta) && isElementVisible(ta));
+        const modalInput = visibleModalTextareas[visibleModalTextareas.length - 1];
+
         if (modalInput) {
-            console.log(\`📝 Modal detected. Injecting multiline text...\`);
+            const modalRoot = modalInput.closest('.x-window, [role="dialog"], .modal, .x-panel') || document;
+            const modalExisting = modalInput.value || '';
+            const matchesModal = modalExisting.trim() !== '' && (
+                normalizeMultiline(modalExisting) === normalizeMultiline(cleanValue) ||
+                normalizeSingleLine(modalExisting) === targetSingle
+            );
+
+            if (matchesModal) {
+                console.log(\`⏩ Text already present & matches in [\${colName}] for \${studentName} - Saving and closing without editing.\`);
+                const btn = findModalSaveCloseButton(modalRoot, true);
+                if (btn) {
+                    btn.click();
+                } else {
+                    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+                }
+                await waitForModalToClose(modalInput);
+                await new Promise(r => setTimeout(r, 150));
+                return;
+            }
+
+            console.log(\`📝 Modal detected. Setting text in [\${colName}]...\`);
             modalInput.focus();
-            
+
             const nativeTextAreaSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set;
             if (nativeTextAreaSetter) {
                 nativeTextAreaSetter.call(modalInput, cleanValue);
@@ -3163,67 +3249,86 @@ document.addEventListener('DOMContentLoaded', () => {
             modalInput.value = cleanValue;
             modalInput.dispatchEvent(new Event('input', { bubbles: true }));
             modalInput.dispatchEvent(new Event('change', { bubbles: true }));
-            
+
             await new Promise(r => setTimeout(r, 200));
-            
-            const buttons = Array.from(document.querySelectorAll('button, .x-btn, a[role="button"], span.x-btn-inner'))
-                .filter(btn => btn.innerText.toLowerCase().includes('save') && btn.getBoundingClientRect().width > 0);
-                
-            const saveCloseBtn = buttons.find(b => b.innerText.toLowerCase().includes('close')) || buttons[buttons.length - 1];
-            
+
+            const saveCloseBtn = findModalSaveCloseButton(modalRoot, false);
             if (saveCloseBtn) {
-                const clickable = saveCloseBtn.closest('a, button, .x-btn') || saveCloseBtn;
-                clickable.click();
-                clickable.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-                clickable.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+                saveCloseBtn.click();
+                const closed = await waitForModalToClose(modalInput, 600);
+                if (!closed && isElementVisible(saveCloseBtn)) {
+                    saveCloseBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+                    saveCloseBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+                    await waitForModalToClose(modalInput, 600);
+                }
+            } else {
+                console.warn(\`⚠️ Save & Close button not found for [\${colName}] (\${studentName}). Pressing Escape.\`);
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
             }
-            
-            await new Promise(r => setTimeout(r, 600)); // Wait for modal to close
-            
-            // Safety measure
-            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
-            await new Promise(r => setTimeout(r, 100));
+
+            if (isElementVisible(modalInput)) {
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
+            }
+            await new Promise(r => setTimeout(r, 150));
 
         } else {
             // INLINE EDITOR (Grade Cells / Dropdowns / Inline textareas)
-            let inlineInput = cell.querySelector('input, textarea');
-            if (!inlineInput || inlineInput.type === 'hidden') inlineInput = document.activeElement;
-            
-            if (inlineInput && (inlineInput.tagName === 'INPUT' || inlineInput.tagName === 'TEXTAREA') && inlineInput.type !== 'hidden') {
-                console.log(\`✏️ Inline input detected. Injecting "\${cleanValue}"...\`);
+            let inlineInput = Array.from(cell.querySelectorAll('input, textarea')).find(el => el.type !== 'hidden' && isElementVisible(el));
+            if (!inlineInput && document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') && document.activeElement.type !== 'hidden' && isElementVisible(document.activeElement)) {
+                inlineInput = document.activeElement;
+            }
+
+            if (inlineInput) {
+                const inlineExisting = inlineInput.value || '';
+                if (inlineExisting.trim() !== '' && normalizeSingleLine(inlineExisting) === targetSingle) {
+                    console.log(\`⏩ Inline value already matches [\${colName}] for \${studentName} - Leaving untouched.\`);
+                    inlineInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                    await new Promise(r => setTimeout(r, 150));
+                    return;
+                }
+
+                console.log(\`✏️ Inline input detected. Injecting "\${cleanValue}" into [\${colName}]...\`);
                 inlineInput.focus();
-                
+                if (typeof inlineInput.select === 'function') inlineInput.select();
+
                 const proto = inlineInput.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
                 const nativeInputValueSetter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
                 if (nativeInputValueSetter) nativeInputValueSetter.call(inlineInput, cleanValue);
                 else inlineInput.value = cleanValue;
-                
+
                 inlineInput.dispatchEvent(new Event('input', { bubbles: true }));
                 inlineInput.dispatchEvent(new Event('change', { bubbles: true }));
-                
-                // Wake up dropdown
-                for (let i = 0; i < cleanValue.length; i++) {
-                    const char = cleanValue[i];
-                    inlineInput.dispatchEvent(new KeyboardEvent('keydown', { key: char, bubbles: true }));
-                    inlineInput.dispatchEvent(new KeyboardEvent('keyup', { key: char, bubbles: true }));
+
+                await new Promise(r => setTimeout(r, 250));
+
+                const findVisibleDropdownMatch = () => {
+                    const dropdownItems = Array.from(document.querySelectorAll('.x-boundlist-item, .ag-rich-select-row, li.x-list-item, .ag-select-list-item, .ag-virtual-list-item'))
+                        .filter(isElementVisible);
+                    return dropdownItems.find(item => item.innerText.trim().toLowerCase() === cleanValue.toLowerCase());
+                };
+
+                let matchingItem = findVisibleDropdownMatch();
+                if (!matchingItem) {
+                    const triggerScope = inlineInput.closest('.x-form-field, .x-field, .ag-cell-edit-wrapper, .ag-cell') || cell;
+                    const triggerBtn = triggerScope ? triggerScope.querySelector('.x-form-trigger, .ag-picker-field-icon') : null;
+                    if (triggerBtn && isElementVisible(triggerBtn)) {
+                        triggerBtn.click();
+                        await new Promise(r => setTimeout(r, 250));
+                        matchingItem = findVisibleDropdownMatch();
+                    }
                 }
-                
-                await new Promise(r => setTimeout(r, 300));
-                
-                const dropdownItems = Array.from(document.querySelectorAll('.x-boundlist-item, .ag-rich-select-row, li.x-list-item, .ag-select-list-item, .ag-virtual-list-item'));
-                const matchingItem = dropdownItems.find(item => item.innerText.trim().toLowerCase() === cleanValue.toLowerCase());
-                
+
                 if (matchingItem) {
+                    matchingItem.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+                    matchingItem.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
                     matchingItem.click();
-                    matchingItem.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
-                    matchingItem.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+                } else if (isElementVisible(inlineInput)) {
+                    inlineInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                    inlineInput.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
+                    inlineInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', keyCode: 9, bubbles: true }));
                 }
-                
-                inlineInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-                inlineInput.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true }));
-                inlineInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', keyCode: 9, bubbles: true }));
-                
-                await new Promise(r => setTimeout(r, 300));
+
+                await new Promise(r => setTimeout(r, 250));
             } else if (cell.isContentEditable) {
                 cell.innerText = cleanValue;
                 cell.dispatchEvent(new Event('input', { bubbles: true }));
@@ -3278,7 +3383,11 @@ document.addEventListener('DOMContentLoaded', () => {
             for (let i = 0; i < taskColumns.length; i++) {
                 if (student.fields[i]) {
                     const targetCell = document.querySelector(\`.ag-row[row-index="\${rowIndex}"] .ag-cell[col-id="\${taskColumns[i].id}"]\`);
-                    await editCell(targetCell, student.fields[i], taskColumns[i].name, gridName);
+                    try {
+                        await editCell(targetCell, student.fields[i], taskColumns[i].name, gridName);
+                    } catch (cellErr) {
+                        console.warn(\`⚠️ Error updating [\${taskColumns[i].name}] for \${gridName}:\`, cellErr);
+                    }
                 }
             }
             updatedCount++;
