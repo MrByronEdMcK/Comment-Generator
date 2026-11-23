@@ -297,6 +297,7 @@
                 </label>
               </div>
               <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                <button type="button" id="btnBulkPasteOutcomes" class="btn btn-secondary btn-sm">Bulk Paste</button>
                 <button type="button" id="btnAddOutcome" class="btn btn-primary btn-sm">+ Add Outcome</button>
                 <button type="button" id="btnClearOutcomes" class="btn btn-danger btn-sm">Clear Outcomes</button>
               </div>
@@ -740,11 +741,32 @@
     </div>
   </div>
 
+  <!-- Bulk Paste Outcomes Modal -->
+  <div id="bulkOutcomeModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="width: min(92vw, 680px);">
+      <div class="modal-header">
+        <h3 class="modal-title">Bulk Paste Outcomes &amp; Comments</h3>
+        <button id="btnCloseBulkOutcomeModal" class="btn-close" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.84rem; color: var(--text-muted); margin-top: 0; margin-bottom: 0.75rem; line-height: 1.4;">
+          Paste rows directly from Excel (tab-separated) or as CSV in the format <strong>Outcome, Achievement, Improvement</strong> (one outcome per row). Any numbering columns between cells are automatically ignored.
+        </p>
+        <textarea id="bulkOutcomeTextarea" class="comment-textarea" style="min-height: 200px;" placeholder="Paste outcomes here (one per line)...&#10;&#10;Outcome 1&#9;Achievement comment for outcome 1.&#9;Improvement comment for outcome 1.&#10;Outcome 2&#9;1&#9;Achievement comment for outcome 2.&#9;1&#9;Improvement comment for outcome 2."></textarea>
+        <div id="bulkOutcomePreviewText" style="font-size: 0.82rem; font-weight: 700; color: var(--primary); margin-top: 0.5rem;">0 outcomes detected</div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnCancelBulkOutcome" class="btn btn-secondary btn-sm">Cancel</button>
+        <button id="btnSubmitBulkOutcome" class="btn btn-primary btn-sm">Import Outcomes</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Application Logic -->
-  <script src="js/storage-service.js?v=20261123"></script>
-  <script src="js/excel-parser.js?v=20261123"></script>
-  <script src="js/comment-engine.js?v=20261123"></script>
-  <script src="js/comment-bank.js?v=20261123"></script>
-  <script src="app.js?v=20261123"></script>
+  <script src="js/storage-service.js?v=20261123b"></script>
+  <script src="js/excel-parser.js?v=20261123b"></script>
+  <script src="js/comment-engine.js?v=20261123b"></script>
+  <script src="js/comment-bank.js?v=20261123b"></script>
+  <script src="app.js?v=20261123b"></script>
 </body>
 </html>

@@ -1148,6 +1148,90 @@ class CommentEngine {
   }
 
   /**
+   * Parse bulk-pasted outcomes from Excel (TSV) or CSV text into [{ name, achievement, improvement }].
+   * Supports rows with or without numbering columns between Outcome, Achievement, and Improvement.
+   */
+  static parseBulkOutcomesText(rawText) {
+    if (!rawText || typeof rawText !== 'string') return [];
+
+    const parseCsvLine = (line) => {
+      const fields = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            current += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (ch === ',' && !inQuotes) {
+          fields.push(current.trim());
+          current = '';
+        } else {
+          current += ch;
+        }
+      }
+      fields.push(current.trim());
+      return fields;
+    };
+
+    const isNumberCell = (val) => /^\d+\.?$/.test(String(val || '').trim());
+    const isHeaderRow = (cells) => {
+      if (cells.length < 2) return false;
+      const c0 = cells[0].toLowerCase();
+      const c1 = cells[1].toLowerCase();
+      return /^outcomes?$/.test(c0) && (/^achievements?$/.test(c1) || /^improvements?$/.test(c1));
+    };
+
+    const results = [];
+    const lines = rawText.split(/\r?\n/);
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+
+      let cells = [];
+      if (line.includes('\t')) {
+        cells = line
+          .split('\t')
+          .map(c => c.trim().replace(/^"(.*)"$/, '$1').trim())
+          .filter(c => c !== '' && !isNumberCell(c));
+      } else {
+        const rawCsvCells = parseCsvLine(line);
+        // Check if standalone number columns act as delimiters in unquoted CSV
+        const numIndices = [];
+        rawCsvCells.forEach((c, idx) => {
+          if (isNumberCell(c)) numIndices.push(idx);
+        });
+
+        if (numIndices.length === 2 && numIndices[0] > 0 && numIndices[1] > numIndices[0] + 1) {
+          const namePart = rawCsvCells.slice(0, numIndices[0]).join(', ').trim();
+          const achPart = rawCsvCells.slice(numIndices[0] + 1, numIndices[1]).join(', ').trim();
+          const impPart = rawCsvCells.slice(numIndices[1] + 1).join(', ').trim();
+          cells = [namePart, achPart, impPart].filter(Boolean);
+        } else {
+          cells = rawCsvCells.filter(c => c !== '' && !isNumberCell(c));
+        }
+      }
+
+      if (cells.length === 0 || isHeaderRow(cells)) continue;
+
+      const name = (cells[0] || '').trim();
+      const achievement = (cells[1] || '').trim();
+      const improvement = (cells[2] || '').trim();
+
+      if (name || achievement || improvement) {
+        results.push({ name, achievement, improvement });
+      }
+    }
+
+    return results;
+  }
+
+  /**
    * Compute class average percentage correct for each outcome across all students,
    * aggregating obtained marks / max marks across all questions tagged to the outcome.
    */

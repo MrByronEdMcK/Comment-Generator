@@ -55,9 +55,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const outcomesListEl = document.getElementById('outcomesList');
   const outcomeCountBadge = document.getElementById('outcomeCountBadge');
   const cfgOutcomeCutoff = document.getElementById('cfgOutcomeCutoff');
+  const btnBulkPasteOutcomes = document.getElementById('btnBulkPasteOutcomes');
   const btnAddOutcome = document.getElementById('btnAddOutcome');
   const btnAddOutcomeBottom = document.getElementById('btnAddOutcomeBottom');
   const btnClearOutcomes = document.getElementById('btnClearOutcomes');
+  const bulkOutcomeModal = document.getElementById('bulkOutcomeModal');
+  const btnCloseBulkOutcomeModal = document.getElementById('btnCloseBulkOutcomeModal');
+  const btnCancelBulkOutcome = document.getElementById('btnCancelBulkOutcome');
+  const btnSubmitBulkOutcome = document.getElementById('btnSubmitBulkOutcome');
+  const bulkOutcomeTextarea = document.getElementById('bulkOutcomeTextarea');
+  const bulkOutcomePreviewText = document.getElementById('bulkOutcomePreviewText');
   const commentModeModal = document.getElementById('commentModeModal');
   const btnCloseCommentModeModal = document.getElementById('btnCloseCommentModeModal');
   const btnChooseModeQuestion = document.getElementById('btnChooseModeQuestion');
@@ -2547,6 +2554,65 @@ document.addEventListener('DOMContentLoaded', () => {
         syncGenerationConfigUI();
         triggerAutoSave();
       }
+    });
+  }
+
+  function closeBulkOutcomeModal() {
+    if (bulkOutcomeModal) bulkOutcomeModal.style.display = 'none';
+  }
+
+  function updateBulkOutcomePreview() {
+    if (!bulkOutcomeTextarea || !bulkOutcomePreviewText) return;
+    const parsed = CommentEngine.parseBulkOutcomesText(bulkOutcomeTextarea.value);
+    bulkOutcomePreviewText.textContent = `${parsed.length} outcome${parsed.length === 1 ? '' : 's'} detected`;
+  }
+
+  if (btnBulkPasteOutcomes) {
+    btnBulkPasteOutcomes.addEventListener('click', () => {
+      if (bulkOutcomeTextarea) bulkOutcomeTextarea.value = '';
+      updateBulkOutcomePreview();
+      if (bulkOutcomeModal) bulkOutcomeModal.style.display = 'flex';
+      if (bulkOutcomeTextarea) bulkOutcomeTextarea.focus();
+    });
+  }
+  if (btnCloseBulkOutcomeModal) btnCloseBulkOutcomeModal.addEventListener('click', closeBulkOutcomeModal);
+  if (btnCancelBulkOutcome) btnCancelBulkOutcome.addEventListener('click', closeBulkOutcomeModal);
+  if (bulkOutcomeTextarea) {
+    bulkOutcomeTextarea.addEventListener('input', updateBulkOutcomePreview);
+    bulkOutcomeTextarea.addEventListener('change', updateBulkOutcomePreview);
+  }
+  if (btnSubmitBulkOutcome) {
+    btnSubmitBulkOutcome.addEventListener('click', () => {
+      const parsed = CommentEngine.parseBulkOutcomesText(bulkOutcomeTextarea ? bulkOutcomeTextarea.value : '');
+      if (parsed.length === 0) {
+        alert('No valid outcomes detected. Please paste rows in the format: Outcome, Achievement, Improvement');
+        return;
+      }
+
+      if (
+        state.outcomes.length === 1 &&
+        !(state.outcomes[0].name || '').trim() &&
+        !(state.outcomes[0].achievement || '').trim() &&
+        !(state.outcomes[0].improvement || '').trim() &&
+        (!Array.isArray(state.outcomes[0].questionKeys) || state.outcomes[0].questionKeys.length === 0)
+      ) {
+        state.outcomes = [];
+      }
+
+      parsed.forEach((item, idx) => {
+        state.outcomes.push({
+          id: `out_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+          name: item.name,
+          achievement: item.achievement,
+          improvement: item.improvement,
+          questionKeys: []
+        });
+      });
+
+      closeBulkOutcomeModal();
+      renderStep3Outcomes();
+      syncGenerationConfigUI();
+      triggerAutoSave();
     });
   }
 
