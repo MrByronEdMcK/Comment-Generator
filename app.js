@@ -16,14 +16,19 @@ document.addEventListener('DOMContentLoaded', () => {
     students: [],
     generatedComments: {}, // studentId -> commentText
     sectionRanking: [], // Order of section preference e.g. ['SAQ', 'MCQ', 'General']
+    commentBankMode: null, // null (not yet chosen), 'question', or 'outcome'
+    outcomes: [], // [{ id, name, achievement, improvement, questionKeys: [] }]
     generationConfig: {
-      totalComments: 3,
+      totalComments: 6,
       enableScoreTiers: false,
+      commentPriorityMode: 'section',
+      commentSourceMode: 'question',
+      outcomeMasteryCutoff: 70,
       enableSectionPriority: false,
       minAchievements: 1,
-      maxAchievements: 3,
+      maxAchievements: 4,
       minImprovements: 1,
-      maxImprovements: 2,
+      maxImprovements: 4,
       highThreshold: 70,
       midThreshold: 50
     },
@@ -41,6 +46,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const assessmentSelect = document.getElementById('assessmentSelect');
   const btnNewAssessment = document.getElementById('btnNewAssessment');
   const saveStatusIndicator = document.getElementById('saveStatusIndicator');
+
+  // Step 3 Comment Bank Mode & Outcome DOM Refs (declared early to avoid TDZ during loadAssessment)
+  const btnBankModeQuestion = document.getElementById('btnBankModeQuestion');
+  const btnBankModeOutcome = document.getElementById('btnBankModeOutcome');
+  const questionBankContainer = document.getElementById('questionBankContainer');
+  const outcomeBankContainer = document.getElementById('outcomeBankContainer');
+  const outcomesListEl = document.getElementById('outcomesList');
+  const outcomeCountBadge = document.getElementById('outcomeCountBadge');
+  const cfgOutcomeCutoff = document.getElementById('cfgOutcomeCutoff');
+  const btnAddOutcome = document.getElementById('btnAddOutcome');
+  const btnAddOutcomeBottom = document.getElementById('btnAddOutcomeBottom');
+  const btnClearOutcomes = document.getElementById('btnClearOutcomes');
+  const commentModeModal = document.getElementById('commentModeModal');
+  const btnCloseCommentModeModal = document.getElementById('btnCloseCommentModeModal');
+  const btnChooseModeQuestion = document.getElementById('btnChooseModeQuestion');
+  const btnChooseModeOutcome = document.getElementById('btnChooseModeOutcome');
 
   // Theme Initialization & Switcher
   const btnThemeToggle = document.getElementById('btnThemeToggle');
@@ -110,6 +131,11 @@ document.addEventListener('DOMContentLoaded', () => {
       selectedSheet: state.selectedSheet || state.excelData?.sheetName || null,
       questions: state.questions,
       commentBank: commentBank.toJSON(),
+      commentBankMode: state.commentBankMode,
+      outcomes: (state.outcomes || []).map(o => ({
+        ...o,
+        questionKeys: Array.isArray(o.questionKeys) ? [...o.questionKeys] : []
+      })),
       generatedComments: state.generatedComments,
       sectionRanking: state.sectionRanking,
       students: state.students,
@@ -210,16 +236,33 @@ document.addEventListener('DOMContentLoaded', () => {
     state.students = Array.isArray(assessment.students) ? [...assessment.students] : [];
     state.generatedComments = assessment.generatedComments ? { ...assessment.generatedComments } : {};
     state.sectionRanking = Array.isArray(assessment.sectionRanking) ? [...assessment.sectionRanking] : [];
+    state.outcomes = Array.isArray(assessment.outcomes)
+      ? assessment.outcomes.map(o => ({ ...o, questionKeys: Array.isArray(o.questionKeys) ? [...o.questionKeys] : [] }))
+      : [];
+    const hasQuestionBankItems = !!(assessment.commentBank && ((assessment.commentBank.achievements && assessment.commentBank.achievements.length > 0) || (assessment.commentBank.improvements && assessment.commentBank.improvements.length > 0)));
+    const hasExistingWork = hasQuestionBankItems || state.questions.length > 0 || state.students.length > 0 || Object.keys(state.generatedComments).length > 0;
+    state.commentBankMode = assessment.commentBankMode
+      || (state.outcomes.length > 0 ? 'outcome' : (hasExistingWork ? 'question' : null));
+    const savedCfg = { ...(assessment.generationConfig || {}) };
+    if (savedCfg.totalComments === 3 && savedCfg.maxAchievements === 3 && savedCfg.maxImprovements === 2) {
+      savedCfg.totalComments = 6;
+      savedCfg.maxAchievements = 4;
+      savedCfg.maxImprovements = 4;
+    }
     state.generationConfig = {
-      totalComments: 3,
+      totalComments: 6,
       enableScoreTiers: false,
+      commentPriorityMode: 'section',
+      commentSourceMode: state.commentBankMode === 'outcome' ? 'outcome' : 'question',
+      outcomeMasteryCutoff: 70,
+      enableSectionPriority: false,
       minAchievements: 1,
-      maxAchievements: 3,
+      maxAchievements: 4,
       minImprovements: 1,
-      maxImprovements: 2,
+      maxImprovements: 4,
       highThreshold: 70,
       midThreshold: 50,
-      ...(assessment.generationConfig || {})
+      ...savedCfg
     };
 
     // Restore or reset comment bank
@@ -266,6 +309,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const cfgEnableSectionPriority = document.getElementById('cfgEnableSectionPriority');
   const cfgSectionPriorityStatusBadge = document.getElementById('cfgSectionPriorityStatusBadge');
   const sectionPriorityBoardContainer = document.getElementById('sectionPriorityBoardContainer');
+  const sectionPriorityControls = document.getElementById('sectionPriorityControls');
+  const performanceModeHint = document.getElementById('performanceModeHint');
+  const btnModeSection = document.getElementById('btnModeSection');
+  const btnModePerformance = document.getElementById('btnModePerformance');
+  const commentSourceRow = document.getElementById('commentSourceRow');
+  const btnSourceQuestion = document.getElementById('btnSourceQuestion');
+  const btnSourceOutcome = document.getElementById('btnSourceOutcome');
   const sectionRankingBreadcrumb = document.getElementById('sectionRankingBreadcrumb');
   const cfgMinAch = document.getElementById('cfgMinAch');
   const cfgMaxAch = document.getElementById('cfgMaxAch');
@@ -281,11 +331,15 @@ document.addEventListener('DOMContentLoaded', () => {
   function updateConfigSummaryBadge() {
     if (!configSummaryBadge) return;
     const cfg = state.generationConfig || {};
-    const total = cfg.totalComments ?? 3;
+    const total = cfg.totalComments ?? 6;
     const isScoreTiers = cfg.enableScoreTiers === true;
-    const isSecPriority = cfg.enableSectionPriority === true;
+    const isPerfMode = cfg.commentPriorityMode === 'performance';
+    const hasOutcomes = Array.isArray(state.outcomes) && state.outcomes.length > 0;
+    const isOutcomeSource = hasOutcomes && cfg.commentSourceMode === 'outcome';
+    const isSecPriority = !isPerfMode && !isOutcomeSource && cfg.enableSectionPriority === true;
 
-    const secPart = isSecPriority ? ' • Section-Prioritized' : '';
+    const sourcePart = isOutcomeSource ? ' • Outcome-Based' : '';
+    const secPart = `${sourcePart}${isPerfMode ? ' • Performance-Based' : (isSecPriority ? ' • Section-Prioritized' : '')}`;
     if (!isScoreTiers) {
       const ach = Math.max(1, Math.ceil(total / 2));
       const imp = Math.max(1, total - ach);
@@ -294,9 +348,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const minAch = cfg.minAchievements ?? 1;
-    const maxAch = cfg.maxAchievements ?? 3;
+    const maxAch = cfg.maxAchievements ?? 4;
     const minImp = cfg.minImprovements ?? 1;
-    const maxImp = cfg.maxImprovements ?? 2;
+    const maxImp = cfg.maxImprovements ?? 4;
     const high = cfg.highThreshold ?? 70;
     const mid = cfg.midThreshold ?? 50;
     configSummaryBadge.textContent = `${total} Comments (${minAch}-${maxAch} Str, ${minImp}-${maxImp} Gro) • Score-Differentiated (≥${high}% / <${mid}%)${secPart}`;
@@ -332,7 +386,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function syncGenerationConfigUI() {
     if (!cfgTotalComments) return;
     const cfg = state.generationConfig || {};
-    cfgTotalComments.value = cfg.totalComments ?? 3;
+    cfgTotalComments.value = cfg.totalComments ?? 6;
 
     const isScoreTiers = cfg.enableScoreTiers === true;
     if (cfgEnableScoreTiers) {
@@ -345,24 +399,51 @@ document.addEventListener('DOMContentLoaded', () => {
       advancedScoreSettingsContainer.style.display = isScoreTiers ? 'block' : 'none';
     }
 
+    const isPerfMode = cfg.commentPriorityMode === 'performance';
     const isSectionPriority = cfg.enableSectionPriority === true;
+    const hasOutcomes = Array.isArray(state.outcomes) && state.outcomes.length > 0;
+    const showSourceToggle = hasOutcomes || state.commentBankMode === 'outcome';
+    const isOutcomeSource = showSourceToggle && cfg.commentSourceMode === 'outcome';
+
+    if (commentSourceRow) {
+      commentSourceRow.style.display = showSourceToggle ? 'inline-flex' : 'none';
+    }
+    if (btnSourceQuestion) btnSourceQuestion.classList.toggle('active', !isOutcomeSource);
+    if (btnSourceOutcome) btnSourceOutcome.classList.toggle('active', isOutcomeSource);
+
+    if (btnModeSection) btnModeSection.classList.toggle('active', !isPerfMode);
+    if (btnModePerformance) btnModePerformance.classList.toggle('active', isPerfMode);
+    if (sectionPriorityControls) {
+      sectionPriorityControls.style.display = (isPerfMode || isOutcomeSource) ? 'none' : 'block';
+    }
+    if (performanceModeHint) {
+      performanceModeHint.style.display = isPerfMode ? 'block' : 'none';
+      if (isPerfMode) {
+        performanceModeHint.textContent = isOutcomeSource
+          ? 'Prioritises hardest outcomes mastered (lowest class %) for strengths and easiest missed outcomes (highest class %) for growth.'
+          : 'Prioritises hardest questions mastered (lowest class %) for strengths and easiest missed questions (highest class %) for growth.';
+      }
+    }
     if (cfgEnableSectionPriority) {
       cfgEnableSectionPriority.checked = isSectionPriority;
     }
     if (cfgSectionPriorityStatusBadge) {
-      cfgSectionPriorityStatusBadge.textContent = isSectionPriority ? 'On' : 'Off';
+      const modeLabel = isPerfMode
+        ? 'Performance Based'
+        : (isOutcomeSource ? 'Random' : (isSectionPriority ? 'Section Priority' : 'Random'));
+      cfgSectionPriorityStatusBadge.textContent = isOutcomeSource ? `Outcome • ${modeLabel}` : modeLabel;
     }
     if (sectionPriorityBoardContainer) {
-      sectionPriorityBoardContainer.style.display = isSectionPriority ? 'block' : 'none';
+      sectionPriorityBoardContainer.style.display = (!isPerfMode && !isOutcomeSource && isSectionPriority) ? 'block' : 'none';
     }
     if (sectionRankingBreadcrumb) {
-      sectionRankingBreadcrumb.style.display = isSectionPriority ? 'inline-flex' : 'none';
+      sectionRankingBreadcrumb.style.display = (!isPerfMode && !isOutcomeSource && isSectionPriority) ? 'inline-flex' : 'none';
     }
 
     if (cfgMinAch) cfgMinAch.value = cfg.minAchievements ?? 1;
-    if (cfgMaxAch) cfgMaxAch.value = cfg.maxAchievements ?? 3;
+    if (cfgMaxAch) cfgMaxAch.value = cfg.maxAchievements ?? 4;
     if (cfgMinImp) cfgMinImp.value = cfg.minImprovements ?? 1;
-    if (cfgMaxImp) cfgMaxImp.value = cfg.maxImprovements ?? 2;
+    if (cfgMaxImp) cfgMaxImp.value = cfg.maxImprovements ?? 4;
     if (cfgHighThreshold) cfgHighThreshold.value = cfg.highThreshold ?? 70;
     if (cfgMidThreshold) cfgMidThreshold.value = cfg.midThreshold ?? 50;
 
@@ -373,7 +454,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateConfigPreview() {
     const cfg = state.generationConfig || {};
-    const total = cfg.totalComments ?? 3;
+    const total = cfg.totalComments ?? 6;
     const isScoreTiers = cfg.enableScoreTiers === true;
     const highThreshold = cfg.highThreshold !== undefined ? parseInt(cfg.highThreshold, 10) : 70;
     const midThreshold = cfg.midThreshold !== undefined ? parseInt(cfg.midThreshold, 10) : 50;
@@ -433,7 +514,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (configWarningBanner) {
       if (isScoreTiers) {
         const minSum = (cfg.minAchievements ?? 1) + (cfg.minImprovements ?? 1);
-        const maxSum = (cfg.maxAchievements ?? 3) + (cfg.maxImprovements ?? 2);
+        const maxSum = (cfg.maxAchievements ?? 4) + (cfg.maxImprovements ?? 4);
 
         if (midThreshold >= highThreshold) {
           configWarningBanner.textContent = `Warning: The Growth Focus cutoff (${midThreshold}%) must be lower than the High Score cutoff (${highThreshold}%).`;
@@ -856,12 +937,38 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    const setPriorityMode = (mode) => {
+      state.generationConfig.commentPriorityMode = mode === 'performance' ? 'performance' : 'section';
+      syncGenerationConfigUI();
+      triggerAutoSave();
+    };
+
+    const setCommentSourceMode = (source) => {
+      state.generationConfig.commentSourceMode = source === 'outcome' ? 'outcome' : 'question';
+      syncGenerationConfigUI();
+      triggerAutoSave();
+    };
+
+    if (btnSourceQuestion) {
+      btnSourceQuestion.addEventListener('click', () => setCommentSourceMode('question'));
+    }
+    if (btnSourceOutcome) {
+      btnSourceOutcome.addEventListener('click', () => setCommentSourceMode('outcome'));
+    }
+
+    if (btnModeSection) {
+      btnModeSection.addEventListener('click', () => setPriorityMode('section'));
+    }
+    if (btnModePerformance) {
+      btnModePerformance.addEventListener('click', () => setPriorityMode('performance'));
+    }
+
     if (cfgEnableSectionPriority) {
       cfgEnableSectionPriority.addEventListener('change', () => {
         const isEnabled = cfgEnableSectionPriority.checked;
         state.generationConfig.enableSectionPriority = isEnabled;
         if (cfgSectionPriorityStatusBadge) {
-          cfgSectionPriorityStatusBadge.textContent = isEnabled ? 'On' : 'Off';
+          cfgSectionPriorityStatusBadge.textContent = isEnabled ? 'Section Priority' : 'Random';
         }
         if (sectionPriorityBoardContainer) {
           sectionPriorityBoardContainer.style.display = isEnabled ? 'block' : 'none';
@@ -876,19 +983,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const onNumChange = () => {
-      let total = parseInt(cfgTotalComments ? cfgTotalComments.value : 3, 10);
-      if (isNaN(total) || total < 1) total = 3;
+      let total = parseInt(cfgTotalComments ? cfgTotalComments.value : 6, 10);
+      if (isNaN(total) || total < 1) total = 6;
 
       let minAch = parseInt(cfgMinAch ? cfgMinAch.value : 1, 10);
       if (isNaN(minAch) || minAch < 0) minAch = 0;
 
-      let maxAch = parseInt(cfgMaxAch ? cfgMaxAch.value : 3, 10);
+      let maxAch = parseInt(cfgMaxAch ? cfgMaxAch.value : 4, 10);
       if (isNaN(maxAch) || maxAch < minAch) maxAch = minAch;
 
       let minImp = parseInt(cfgMinImp ? cfgMinImp.value : 1, 10);
       if (isNaN(minImp) || minImp < 0) minImp = 0;
 
-      let maxImp = parseInt(cfgMaxImp ? cfgMaxImp.value : 2, 10);
+      let maxImp = parseInt(cfgMaxImp ? cfgMaxImp.value : 4, 10);
       if (isNaN(maxImp) || maxImp < minImp) maxImp = minImp;
 
       let highThresh = parseInt(cfgHighThreshold ? cfgHighThreshold.value : 70, 10);
@@ -1443,8 +1550,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (stepNum === 0) renderManagerDashboard();
     if (stepNum === 1) updateStep1UploadUI();
     if (stepNum === 2) renderStep2Questions();
-    if (stepNum === 3) renderStep3CommentBank();
+    if (stepNum === 3) {
+      if (state.commentBankMode === null) {
+        const modal = document.getElementById('commentModeModal');
+        if (modal) modal.style.display = 'flex';
+      }
+      renderStep3CommentBank();
+    }
     if (stepNum === 4) {
+      syncGenerationConfigUI();
       renderStep4Dashboard();
       setTimeout(autoResizeAllCommentBoxes, 50);
     }
@@ -1593,7 +1707,7 @@ document.addEventListener('DOMContentLoaded', () => {
           questions: demoQuestions,
           students: demoStudents,
           sectionRanking: [['SAQ', 'MCQ', 'General']],
-          generationConfig: { totalComments: 3, enableScoreTiers: false, enableSectionPriority: false, minAchievements: 1, maxAchievements: 3, minImprovements: 1, maxImprovements: 2, highThreshold: 70, midThreshold: 50 },
+          generationConfig: { totalComments: 6, enableScoreTiers: false, enableSectionPriority: false, minAchievements: 1, maxAchievements: 4, minImprovements: 1, maxImprovements: 4, highThreshold: 70, midThreshold: 50 },
           commentBank: demoBank,
           generatedComments: demoComments,
           currentStep: 4,
@@ -2198,8 +2312,255 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnGotoStep3.addEventListener('click', () => showStep(3));
 
-  // --- Step 3: Comment Bank Management with Section Tabs ---
+  // --- Step 3: Comment Bank Management with Section Tabs & Outcome Mode ---
+  function setCommentBankMode(mode) {
+    state.commentBankMode = mode === 'outcome' ? 'outcome' : 'question';
+    if (state.commentBankMode === 'outcome') {
+      if (state.outcomes.length === 0) {
+        addEmptyOutcome();
+      }
+      state.generationConfig.commentSourceMode = 'outcome';
+    } else {
+      state.generationConfig.commentSourceMode = 'question';
+    }
+    if (commentModeModal) commentModeModal.style.display = 'none';
+    syncGenerationConfigUI();
+    renderStep3CommentBank();
+    triggerAutoSave();
+  }
+
+  function addEmptyOutcome() {
+    state.outcomes.push({
+      id: `out_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: '',
+      achievement: '',
+      improvement: '',
+      questionKeys: []
+    });
+  }
+
+  function renderStep3Outcomes() {
+    if (!outcomesListEl) return;
+    if (outcomeCountBadge) outcomeCountBadge.textContent = String(state.outcomes.length);
+    if (cfgOutcomeCutoff) cfgOutcomeCutoff.value = state.generationConfig.outcomeMasteryCutoff ?? 70;
+
+    const validQuestions = (state.questions || []).filter(q => !q.isSectionBreak && q.included !== false);
+    const hasMultiSection = new Set(validQuestions.map(q => q.section || 'General')).size > 1;
+
+    outcomesListEl.innerHTML = '';
+    if (state.outcomes.length === 0) {
+      outcomesListEl.innerHTML = `
+        <div class="empty-state" style="padding: 1.5rem; text-align: center; color: var(--text-muted); font-size: 0.86rem;">
+          No outcomes added yet. Click <strong>+ Add Outcome</strong> to create one.
+        </div>`;
+      return;
+    }
+
+    state.outcomes.forEach((outcome, idx) => {
+      const card = document.createElement('div');
+      card.className = 'outcome-card';
+      const taggedSet = new Set(Array.isArray(outcome.questionKeys) ? outcome.questionKeys : []);
+
+      const header = document.createElement('div');
+      header.className = 'outcome-card-header';
+
+      const nameInput = document.createElement('input');
+      nameInput.type = 'text';
+      nameInput.className = 'outcome-name-input';
+      nameInput.placeholder = `Outcome ${idx + 1} name...`;
+      nameInput.value = outcome.name || '';
+      const onNameUpdate = () => {
+        outcome.name = nameInput.value;
+        triggerAutoSave();
+      };
+      nameInput.addEventListener('input', onNameUpdate);
+      nameInput.addEventListener('change', onNameUpdate);
+
+      const taggedBadge = document.createElement('span');
+      taggedBadge.className = 'config-box-badge';
+      taggedBadge.textContent = `${taggedSet.size} Qs`;
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn btn-danger btn-sm';
+      delBtn.textContent = 'Delete';
+      delBtn.addEventListener('click', () => {
+        state.outcomes.splice(idx, 1);
+        renderStep3Outcomes();
+        syncGenerationConfigUI();
+        triggerAutoSave();
+      });
+
+      header.appendChild(nameInput);
+      header.appendChild(taggedBadge);
+      header.appendChild(delBtn);
+
+      const commentsGrid = document.createElement('div');
+      commentsGrid.className = 'outcome-comments-grid';
+
+      const achField = document.createElement('div');
+      achField.className = 'outcome-comment-field';
+      const achLabel = document.createElement('label');
+      achLabel.style.color = 'var(--accent-achievement)';
+      achLabel.textContent = 'Achievement (when >= cutoff)';
+      const achArea = document.createElement('textarea');
+      achArea.className = 'comment-textarea';
+      achArea.rows = 2;
+      achArea.placeholder = 'Enter achievement comment for this outcome...';
+      achArea.value = outcome.achievement || '';
+      const onAchUpdate = () => {
+        outcome.achievement = achArea.value;
+        triggerAutoSave();
+      };
+      achArea.addEventListener('input', onAchUpdate);
+      achArea.addEventListener('change', onAchUpdate);
+      achField.appendChild(achLabel);
+      achField.appendChild(achArea);
+
+      const impField = document.createElement('div');
+      impField.className = 'outcome-comment-field';
+      const impLabel = document.createElement('label');
+      impLabel.style.color = 'var(--accent-improvement)';
+      impLabel.textContent = 'Improvement (when < cutoff)';
+      const impArea = document.createElement('textarea');
+      impArea.className = 'comment-textarea';
+      impArea.rows = 2;
+      impArea.placeholder = 'Enter improvement comment for this outcome...';
+      impArea.value = outcome.improvement || '';
+      const onImpUpdate = () => {
+        outcome.improvement = impArea.value;
+        triggerAutoSave();
+      };
+      impArea.addEventListener('input', onImpUpdate);
+      impArea.addEventListener('change', onImpUpdate);
+      impField.appendChild(impLabel);
+      impField.appendChild(impArea);
+
+      commentsGrid.appendChild(achField);
+      commentsGrid.appendChild(impField);
+
+      const tagRow = document.createElement('div');
+      tagRow.className = 'outcome-tag-row';
+      const tagLabel = document.createElement('span');
+      tagLabel.className = 'outcome-tag-label';
+      tagLabel.textContent = 'Tag Questions:';
+      const pillsWrap = document.createElement('div');
+      pillsWrap.className = 'outcome-tag-pills';
+
+      if (validQuestions.length === 0) {
+        const emptyHint = document.createElement('span');
+        emptyHint.style.fontSize = '0.78rem';
+        emptyHint.style.color = 'var(--text-muted)';
+        emptyHint.textContent = 'No questions loaded yet (upload a spreadsheet in Step 1).';
+        pillsWrap.appendChild(emptyHint);
+      } else {
+        validQuestions.forEach(q => {
+          const qKey = CommentEngine.getQuestionKey(q);
+          const qDisplay = q.id || q.title || 'Q';
+          const pillLabel = hasMultiSection && q.section && q.section !== 'General'
+            ? `${q.section}: ${qDisplay}`
+            : qDisplay;
+
+          const pill = document.createElement('button');
+          pill.type = 'button';
+          pill.className = `outcome-q-pill ${taggedSet.has(qKey) ? 'selected' : ''}`;
+          pill.textContent = pillLabel;
+          pill.title = `${pillLabel} (${q.maxMarks || 1} marks)`;
+          pill.addEventListener('click', () => {
+            if (!Array.isArray(outcome.questionKeys)) outcome.questionKeys = [];
+            const pos = outcome.questionKeys.indexOf(qKey);
+            if (pos >= 0) {
+              outcome.questionKeys.splice(pos, 1);
+              pill.classList.remove('selected');
+            } else {
+              outcome.questionKeys.push(qKey);
+              pill.classList.add('selected');
+            }
+            taggedBadge.textContent = `${outcome.questionKeys.length} Qs`;
+            triggerAutoSave();
+          });
+          pillsWrap.appendChild(pill);
+        });
+      }
+
+      tagRow.appendChild(tagLabel);
+      tagRow.appendChild(pillsWrap);
+
+      card.appendChild(header);
+      card.appendChild(commentsGrid);
+      card.appendChild(tagRow);
+      outcomesListEl.appendChild(card);
+    });
+  }
+
+  if (btnBankModeQuestion) btnBankModeQuestion.addEventListener('click', () => setCommentBankMode('question'));
+  if (btnBankModeOutcome) btnBankModeOutcome.addEventListener('click', () => setCommentBankMode('outcome'));
+  if (btnChooseModeQuestion) btnChooseModeQuestion.addEventListener('click', () => setCommentBankMode('question'));
+  if (btnChooseModeOutcome) btnChooseModeOutcome.addEventListener('click', () => setCommentBankMode('outcome'));
+  if (btnCloseCommentModeModal) {
+    btnCloseCommentModeModal.addEventListener('click', () => {
+      if (state.commentBankMode === null) {
+        setCommentBankMode('question');
+      } else if (commentModeModal) {
+        commentModeModal.style.display = 'none';
+      }
+    });
+  }
+  if (cfgOutcomeCutoff) {
+    const onCutoffChange = () => {
+      const val = Math.max(0, Math.min(100, parseFloat(cfgOutcomeCutoff.value) || 0));
+      state.generationConfig.outcomeMasteryCutoff = val;
+      triggerAutoSave();
+    };
+    cfgOutcomeCutoff.addEventListener('input', onCutoffChange);
+    cfgOutcomeCutoff.addEventListener('change', onCutoffChange);
+  }
+  function handleAddOutcomeAndScroll() {
+    addEmptyOutcome();
+    renderStep3Outcomes();
+    syncGenerationConfigUI();
+    triggerAutoSave();
+    requestAnimationFrame(() => {
+      if (!outcomesListEl) return;
+      const cards = outcomesListEl.querySelectorAll('.outcome-card');
+      const lastCard = cards[cards.length - 1];
+      if (lastCard) {
+        lastCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const input = lastCard.querySelector('.outcome-name-input');
+        if (input) input.focus({ preventScroll: true });
+      }
+    });
+  }
+
+  if (btnAddOutcome) {
+    btnAddOutcome.addEventListener('click', handleAddOutcomeAndScroll);
+  }
+  if (btnAddOutcomeBottom) {
+    btnAddOutcomeBottom.addEventListener('click', handleAddOutcomeAndScroll);
+  }
+  if (btnClearOutcomes) {
+    btnClearOutcomes.addEventListener('click', () => {
+      if (state.outcomes.length === 0) return;
+      if (confirm('Clear all outcomes and their comments?')) {
+        state.outcomes = [];
+        renderStep3Outcomes();
+        syncGenerationConfigUI();
+        triggerAutoSave();
+      }
+    });
+  }
+
   function renderStep3CommentBank() {
+    const isOutcomeMode = state.commentBankMode === 'outcome';
+    if (btnBankModeQuestion) btnBankModeQuestion.classList.toggle('active', !isOutcomeMode);
+    if (btnBankModeOutcome) btnBankModeOutcome.classList.toggle('active', isOutcomeMode);
+    if (questionBankContainer) questionBankContainer.style.display = isOutcomeMode ? 'none' : 'block';
+    if (outcomeBankContainer) outcomeBankContainer.style.display = isOutcomeMode ? 'block' : 'none';
+
+    renderStep3Outcomes();
+
+    if (!achievementsList || !improvementsList) return;
+
     const sections = getAssessmentSections();
     if (!sections.includes(activeCommentBankSection)) {
       activeCommentBankSection = sections[0] || 'General';
@@ -2464,7 +2825,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const achMatch = text.match(/Achievements:\s*([\s\S]*?)(?=(?:Improvements:|$))/i);
     const impMatch = text.match(/Improvements:\s*([\s\S]*?)$/i);
-    const hasNonePlaceholder = /\(none qualified from bank\)/i.test(text) || /\[No (?:Achievement|Improvement) comment/i.test(text);
+    const hasNonePlaceholder = /\(none qualified from bank\)/i.test(text) || /\[(?:No|Missing) (?:Achievement|Improvement)/i.test(text);
     const { achievements, improvements, full } = extractFeedbackSections(text);
 
     // Allow deliberate headerless freeform manual comments unless empty or placeholder
@@ -2472,17 +2833,34 @@ document.addEventListener('DOMContentLoaded', () => {
       return { needsManualReview: false, missingAch: false, missingImp: false, reason: '' };
     }
 
-    const missingAch = !text || !achievements.trim() || /Achievements:\s*\n*\s*\(None qualified from bank\)/i.test(text);
-    const missingImp = !text || !improvements.trim() || /Improvements:\s*\n*\s*\(None qualified from bank\)/i.test(text);
+    const { targetAch, targetImp } = CommentEngine.getTargetDistribution(summary.percentage, state.generationConfig);
+    const achRawLines = (achMatch ? achMatch[1] : '').split(/\r?\n+/).map(l => l.trim()).filter(l =>
+      l && !/\(none qualified from bank\)/i.test(l) && !/\[Missing Achievement\s*\d*\]/i.test(l)
+    );
+    const impRawLines = (impMatch ? impMatch[1] : '').split(/\r?\n+/).map(l => l.trim()).filter(l =>
+      l && !/\(none qualified from bank\)/i.test(l) && !/\[Missing Improvement\s*\d*\]/i.test(l)
+    );
+
+    const hasMissingAchTag = /\[Missing Achievement\s*\d*\]/i.test(text);
+    const hasMissingImpTag = /\[Missing Improvement\s*\d*\]/i.test(text);
+
+    const missingAch = !text || !achievements.trim() || /Achievements:\s*\n*\s*\(None qualified from bank\)/i.test(text) || hasMissingAchTag || achRawLines.length < targetAch;
+    const missingImp = !text || !improvements.trim() || /Improvements:\s*\n*\s*\(None qualified from bank\)/i.test(text) || hasMissingImpTag || impRawLines.length < targetImp;
     const needsManualReview = missingAch || missingImp;
 
     let reason = '';
-    if (missingAch && missingImp) {
+    if (!text || (achRawLines.length === 0 && impRawLines.length === 0)) {
       reason = 'No qualifying comments matched — add manually';
+    } else if (missingAch && missingImp) {
+      reason = `Missing achievement & improvement comments (${achRawLines.length}/${targetAch} Ach, ${impRawLines.length}/${targetImp} Imp) — review manually`;
     } else if (missingImp) {
-      reason = 'No improvement comments qualified — add manually';
+      reason = impRawLines.length === 0
+        ? 'No improvement comments qualified — add manually'
+        : `Missing improvement comment (${impRawLines.length}/${targetImp}) — review manually`;
     } else if (missingAch) {
-      reason = 'No achievement comments qualified — add manually';
+      reason = achRawLines.length === 0
+        ? 'No achievement comments qualified — add manually'
+        : `Missing achievement comment (${achRawLines.length}/${targetAch}) — review manually`;
     }
 
     return { needsManualReview, missingAch, missingImp, reason };
@@ -2717,13 +3095,11 @@ document.addEventListener('DOMContentLoaded', () => {
         b.innerHTML = '<span>Regenerating...</span>';
         b.disabled = true;
 
-        const config = {
-          ...state.generationConfig,
-          currentComment: state.generatedComments[id] || '',
-          tone: 'formal and encouraging'
-        };
-
         const activeQuestions = state.questions.filter(q => !q.isSectionBreak && q.included !== false);
+        const config = buildGenerationConfig(activeQuestions, {
+          currentComment: state.generatedComments[id] || ''
+        });
+
         try {
           const comment = CommentEngine.generateCommentsForStudent(student, activeQuestions, commentBank, config, state.sectionRanking);
           state.generatedComments[id] = comment;
@@ -2806,6 +3182,20 @@ document.addEventListener('DOMContentLoaded', () => {
     renderStudentCards(getFilteredStudentsForStep4());
   });
 
+  function buildGenerationConfig(activeQuestions, extra = {}) {
+    const isOutcomeSource = state.generationConfig.commentSourceMode === 'outcome' && Array.isArray(state.outcomes) && state.outcomes.length > 0;
+    return {
+      ...state.generationConfig,
+      tone: 'formal and encouraging',
+      questionAverages: CommentEngine.computeQuestionAverages(state.students, activeQuestions),
+      ...(isOutcomeSource ? {
+        outcomes: state.outcomes,
+        outcomeAverages: CommentEngine.computeOutcomeAverages(state.students, activeQuestions, state.outcomes)
+      } : {}),
+      ...extra
+    };
+  }
+
   // Helper to run batch generation for a list of students
   function runBatchGeneration(studentsToProcess) {
     if (!studentsToProcess || studentsToProcess.length === 0) return;
@@ -2833,10 +3223,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressEstTime = document.getElementById('progressEstTime');
 
     const activeQuestions = state.questions.filter(q => !q.isSectionBreak && q.included !== false);
-    const config = {
-      ...state.generationConfig,
-      tone: 'formal and encouraging'
-    };
+    const config = buildGenerationConfig(activeQuestions);
 
     const total = studentsToProcess.length;
     const startTime = Date.now();
@@ -2844,7 +3231,11 @@ document.addEventListener('DOMContentLoaded', () => {
       ? state.sectionRanking.map(tier => Array.isArray(tier) ? tier.join(' = ') : tier).join(' > ')
       : 'General';
 
-    if (progressStatusText) progressStatusText.textContent = `Applying section priority ranking (${rankingDisplay})...`;
+    if (progressStatusText) {
+      progressStatusText.textContent = config.commentPriorityMode === 'performance'
+        ? 'Applying performance-based difficulty ranking...'
+        : `Applying section priority ranking (${rankingDisplay})...`;
+    }
 
     let processed = 0;
     let missingReviewCount = 0;
@@ -2985,7 +3376,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const validLines = rawLines.filter(l => 
         !/^achievements:\s*$/i.test(l) &&
         !/^improvements:\s*$/i.test(l) &&
-        !/\(none qualified from bank\)/i.test(l)
+        !/\(none qualified from bank\)/i.test(l) &&
+        !/\[Missing (?:Achievement|Improvement)\s*\d*\]/i.test(l)
       );
 
       let sentences = [];
@@ -3530,7 +3922,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const generatedCount = Object.keys(state.generatedComments).length;
       if (generatedCount === 0) {
         const activeQuestions = state.questions.filter(q => !q.isSectionBreak && q.included !== false);
-        const config = { ...state.generationConfig, tone: 'formal and encouraging' };
+        const config = buildGenerationConfig(activeQuestions);
         state.students.forEach(student => {
           state.generatedComments[student.id] = CommentEngine.generateCommentsForStudent(
             student,

@@ -54,7 +54,15 @@ class StorageService {
     try {
       localStorage.setItem(this.STORAGE_KEY_CLASSES, JSON.stringify(classes));
     } catch (e) {
-      console.warn('localStorage quota exceeded while saving class data:', e);
+      console.warn('localStorage quota exceeded while saving class data; stripping cached spreadsheet binaries and retrying:', e);
+      try {
+        classes.forEach(c => {
+          delete c.spreadsheetBase64;
+        });
+        localStorage.setItem(this.STORAGE_KEY_CLASSES, JSON.stringify(classes));
+      } catch (retryErr) {
+        console.error('Failed to save classes to localStorage even after stripping spreadsheet binaries:', retryErr);
+      }
     }
   }
 
@@ -98,6 +106,8 @@ class StorageService {
       selectedSheet: assessmentObj.selectedSheet !== undefined ? assessmentObj.selectedSheet : (idx >= 0 ? classObj.assessments[idx].selectedSheet : null),
       questions: assessmentObj.questions || (idx >= 0 ? classObj.assessments[idx].questions : []),
       commentBank: assessmentObj.commentBank || (idx >= 0 ? classObj.assessments[idx].commentBank : { achievements: [], improvements: [] }),
+      commentBankMode: assessmentObj.commentBankMode !== undefined ? assessmentObj.commentBankMode : (idx >= 0 ? (classObj.assessments[idx].commentBankMode || null) : null),
+      outcomes: assessmentObj.outcomes !== undefined ? assessmentObj.outcomes : (idx >= 0 ? (classObj.assessments[idx].outcomes || []) : []),
       generatedComments: assessmentObj.generatedComments || (idx >= 0 ? classObj.assessments[idx].generatedComments : {}),
       sectionRanking: assessmentObj.sectionRanking || (idx >= 0 ? (classObj.assessments[idx].sectionRanking || []) : []),
       students: assessmentObj.students || (idx >= 0 ? classObj.assessments[idx].students : []),

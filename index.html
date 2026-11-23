@@ -121,7 +121,13 @@
       <!-- STEP 1: UPLOAD GRADEBOOK SPREADSHEET -->
       <section id="step1Panel" class="step-panel">
         <div class="card">
-          <h2 class="card-title">1. Upload Graded Spreadsheet</h2>
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
+            <h2 class="card-title" style="margin-bottom: 0;">1. Upload Graded Spreadsheet</h2>
+            <a href="Template.xlsx" download="Template.xlsx" id="btnDownloadTemplate" class="btn btn-secondary btn-sm" title="Download a blank gradebook template matching the expected import format">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+              <span>Download Template (.xlsx)</span>
+            </a>
+          </div>
 
           <div class="dropzone" id="spreadsheetDropzone">
             <svg class="dropzone-icon" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
@@ -204,68 +210,102 @@
       <!-- STEP 3: COMMENT BANK -->
       <section id="step3Panel" class="step-panel">
         <div class="card">
-          <h2 class="card-title">3. Comment Bank</h2>
-
-          <!-- Section Switcher Tabs -->
-          <div class="section-tabs-container" id="sectionTabsContainer">
-            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.65rem;">
-              <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span style="font-size: 0.86rem; font-weight: 700; color: var(--text-main);">Bank Section:</span>
-              </div>
-              <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
-                <button id="btnExportCommentBank" class="btn btn-secondary btn-sm" title="Download comment bank as JSON">
-                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                  <span>Export Bank</span>
-                </button>
-                <button id="btnImportCommentBank" class="btn btn-secondary btn-sm" title="Import comments from JSON file">
-                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                  <span>Import Bank</span>
-                </button>
-                <input type="file" id="importCommentBankInput" accept=".json" hidden>
-                <button id="btnClearActiveSection" class="btn btn-secondary btn-sm" title="Clear comments for selected section">Clear Section</button>
-                <button id="btnClearAllCommentBanks" class="btn btn-danger btn-sm" title="Clear all comments across all sections">Clear All</button>
-              </div>
-            </div>
-            <div class="section-tabs" id="sectionTabs">
-              <!-- Dynamically populated section tabs -->
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
+            <h2 class="card-title" style="margin-bottom: 0;">3. Comment Bank</h2>
+            <div class="priority-mode-segmented" role="group" aria-label="Comment Bank Method">
+              <button type="button" class="priority-mode-btn active" id="btnBankModeQuestion" data-bank-mode="question">Comment per Question</button>
+              <button type="button" class="priority-mode-btn" id="btnBankModeOutcome" data-bank-mode="outcome">Comment per Outcome</button>
             </div>
           </div>
 
-          <div class="comment-bank-grid">
-            <!-- Achievements List -->
-            <div class="comment-column">
-              <div class="column-header">
-                <span class="column-title">
-                  Achievements (Strengths)
-                  <span class="badge-achieve" id="achieveCount">0</span>
-                </span>
-                <div style="display: flex; gap: 0.35rem;">
-                  <button id="btnBulkPasteAchieve" class="btn btn-secondary btn-sm">Bulk Paste</button>
-                  <button id="btnAddAchievement" class="btn btn-secondary btn-sm">+ Add</button>
-                  <button id="btnClearSectionAchieve" class="btn btn-secondary btn-sm" title="Clear achievements for active section">Clear</button>
+          <div id="questionBankContainer">
+            <!-- Section Switcher Tabs -->
+            <div class="section-tabs-container" id="sectionTabsContainer">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.65rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <span style="font-size: 0.86rem; font-weight: 700; color: var(--text-main);">Bank Section:</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                  <button id="btnExportCommentBank" class="btn btn-secondary btn-sm" title="Download comment bank as JSON">
+                    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    <span>Export Bank</span>
+                  </button>
+                  <button id="btnImportCommentBank" class="btn btn-secondary btn-sm" title="Import comments from JSON file">
+                    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    <span>Import Bank</span>
+                  </button>
+                  <input type="file" id="importCommentBankInput" accept=".json" hidden>
+                  <button id="btnClearActiveSection" class="btn btn-secondary btn-sm" title="Clear comments for selected section">Clear Section</button>
+                  <button id="btnClearAllCommentBanks" class="btn btn-danger btn-sm" title="Clear all comments across all sections">Clear All</button>
                 </div>
               </div>
-              <div class="comment-list" id="achievementsList">
-                <!-- Dynamically populated -->
+              <div class="section-tabs" id="sectionTabs">
+                <!-- Dynamically populated section tabs -->
               </div>
             </div>
 
-            <!-- Improvements List -->
-            <div class="comment-column">
-              <div class="column-header">
-                <span class="column-title">
-                  Improvements (Areas for Growth)
-                  <span class="badge-improve" id="improveCount">0</span>
-                </span>
-                <div style="display: flex; gap: 0.35rem;">
-                  <button id="btnBulkPasteImprove" class="btn btn-secondary btn-sm">Bulk Paste</button>
-                  <button id="btnAddImprovement" class="btn btn-secondary btn-sm">+ Add</button>
-                  <button id="btnClearSectionImprove" class="btn btn-secondary btn-sm" title="Clear improvements for active section">Clear</button>
+            <div class="comment-bank-grid">
+              <!-- Achievements List -->
+              <div class="comment-column">
+                <div class="column-header">
+                  <span class="column-title">
+                    Achievements (Strengths)
+                    <span class="badge-achieve" id="achieveCount">0</span>
+                  </span>
+                  <div style="display: flex; gap: 0.35rem;">
+                    <button id="btnBulkPasteAchieve" class="btn btn-secondary btn-sm">Bulk Paste</button>
+                    <button id="btnAddAchievement" class="btn btn-secondary btn-sm">+ Add</button>
+                    <button id="btnClearSectionAchieve" class="btn btn-secondary btn-sm" title="Clear achievements for active section">Clear</button>
+                  </div>
+                </div>
+                <div class="comment-list" id="achievementsList">
+                  <!-- Dynamically populated -->
                 </div>
               </div>
-              <div class="comment-list" id="improvementsList">
-                <!-- Dynamically populated -->
+
+              <!-- Improvements List -->
+              <div class="comment-column">
+                <div class="column-header">
+                  <span class="column-title">
+                    Improvements (Areas for Growth)
+                    <span class="badge-improve" id="improveCount">0</span>
+                  </span>
+                  <div style="display: flex; gap: 0.35rem;">
+                    <button id="btnBulkPasteImprove" class="btn btn-secondary btn-sm">Bulk Paste</button>
+                    <button id="btnAddImprovement" class="btn btn-secondary btn-sm">+ Add</button>
+                    <button id="btnClearSectionImprove" class="btn btn-secondary btn-sm" title="Clear improvements for active section">Clear</button>
+                  </div>
+                </div>
+                <div class="comment-list" id="improvementsList">
+                  <!-- Dynamically populated -->
+                </div>
               </div>
+            </div>
+          </div>
+
+          <!-- Outcome-Based Comment Bank Container -->
+          <div id="outcomeBankContainer" style="display: none;">
+            <div class="outcome-toolbar">
+              <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                <span style="font-size: 0.88rem; font-weight: 700; color: var(--text-main);">
+                  Outcomes <span class="config-box-badge" id="outcomeCountBadge">0</span>
+                </span>
+                <label style="display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; font-weight: 600; color: var(--text-muted);">
+                  <span>Mastery Cutoff:</span>
+                  <input type="number" id="cfgOutcomeCutoff" class="config-num-input" value="70" min="0" max="100" step="1" style="width: 58px;">
+                  <span>%</span>
+                </label>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                <button type="button" id="btnAddOutcome" class="btn btn-primary btn-sm">+ Add Outcome</button>
+                <button type="button" id="btnClearOutcomes" class="btn btn-danger btn-sm">Clear Outcomes</button>
+              </div>
+            </div>
+            <div id="outcomesList" class="outcomes-list">
+              <!-- Dynamically populated outcome cards -->
+            </div>
+            <div style="margin-top: 0.85rem; display: flex; justify-content: flex-start;">
+              <button type="button" id="btnAddOutcomeBottom" class="btn btn-primary btn-sm">+ Add Outcome</button>
             </div>
           </div>
 
@@ -345,7 +385,7 @@
                     <span class="config-box-badge">Default Target</span>
                   </div>
                   <div class="config-input-wrapper">
-                    <input type="number" id="cfgTotalComments" class="config-num-input-compact" value="3" min="1" max="12" step="1">
+                    <input type="number" id="cfgTotalComments" class="config-num-input-compact" value="6" min="1" max="12" step="1">
                     <span class="config-input-label">comments per student</span>
                   </div>
                 </div>
@@ -385,7 +425,7 @@
                           <input type="number" id="cfgMinAch" class="config-num-input" value="1" min="0" max="10" step="1">
                           <span style="color: var(--text-light); font-size: 0.8rem;">to</span>
                           <span class="range-label">Max</span>
-                          <input type="number" id="cfgMaxAch" class="config-num-input" value="3" min="1" max="10" step="1">
+                          <input type="number" id="cfgMaxAch" class="config-num-input" value="4" min="1" max="10" step="1">
                         </div>
                       </div>
                       <div class="range-pair">
@@ -395,7 +435,7 @@
                           <input type="number" id="cfgMinImp" class="config-num-input" value="1" min="0" max="10" step="1">
                           <span style="color: var(--text-light); font-size: 0.8rem;">to</span>
                           <span class="range-label">Max</span>
-                          <input type="number" id="cfgMaxImp" class="config-num-input" value="2" min="1" max="10" step="1">
+                          <input type="number" id="cfgMaxImp" class="config-num-input" value="4" min="1" max="10" step="1">
                         </div>
                       </div>
                     </div>
@@ -481,20 +521,34 @@
                 </div>
               </div>
 
-              <!-- Section Priority Board Card -->
+              <!-- Comment Selection Priority Card -->
               <div class="section-ranking-container" id="sectionRankingContainer">
                 <div class="section-priority-header">
-                  <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
-                    <strong style="font-size: 0.95rem; color: var(--text-main);">Section Priority Order</strong>
-                    <span id="cfgSectionPriorityStatusBadge" class="config-box-badge">Off</span>
+                  <div style="display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
+                    <strong style="font-size: 0.95rem; color: var(--text-main);">Comment Selection Priority</strong>
+                    <span id="cfgSectionPriorityStatusBadge" class="config-box-badge">Random</span>
                   </div>
-                  <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                  <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                    <div id="commentSourceRow" class="priority-mode-segmented" role="group" aria-label="Comment Source Mode" style="display: none;">
+                      <button type="button" class="priority-mode-btn active" id="btnSourceQuestion" data-source="question">Question Based</button>
+                      <button type="button" class="priority-mode-btn" id="btnSourceOutcome" data-source="outcome">Outcome Based</button>
+                    </div>
+                    <div class="priority-mode-segmented" role="group" aria-label="Comment Selection Priority Mode">
+                      <button type="button" class="priority-mode-btn active" id="btnModeSection" data-mode="section">Random / Section</button>
+                      <button type="button" class="priority-mode-btn" id="btnModePerformance" data-mode="performance">Performance Based</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Section Priority Sub-controls (shown in Random / Section mode) -->
+                <div id="sectionPriorityControls" style="margin-top: 0.75rem;">
+                  <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;">
                     <div style="display: flex; align-items: center; gap: 0.5rem;">
                       <label class="toggle-switch" for="cfgEnableSectionPriority">
                         <input type="checkbox" id="cfgEnableSectionPriority">
                         <span class="toggle-slider"></span>
                       </label>
-                      <label for="cfgEnableSectionPriority" style="font-size: 0.88rem; font-weight: 600; cursor: pointer; color: var(--text-main);">
+                      <label for="cfgEnableSectionPriority" style="font-size: 0.86rem; font-weight: 600; cursor: pointer; color: var(--text-main);">
                         Enable section priority
                       </label>
                     </div>
@@ -502,13 +556,18 @@
                       Priority: General
                     </div>
                   </div>
+
+                  <!-- Section Priority Board (Tiles in Rows with Drag Above/Below Dropzones - hidden when toggle is off) -->
+                  <div id="sectionPriorityBoardContainer" style="display: none; margin-top: 0.75rem;">
+                    <div id="sectionPriorityBoard" class="section-priority-board">
+                      <!-- Populated dynamically: tier rows with tiles and drag zones -->
+                    </div>
+                  </div>
                 </div>
 
-                <!-- Section Priority Board (Tiles in Rows with Drag Above/Below Dropzones - hidden when toggle is off) -->
-                <div id="sectionPriorityBoardContainer" style="display: none; margin-top: 0.85rem;">
-                  <div id="sectionPriorityBoard" class="section-priority-board">
-                    <!-- Populated dynamically: tier rows with tiles and drag zones -->
-                  </div>
+                <!-- Performance Based Hint (shown in Performance Based mode) -->
+                <div id="performanceModeHint" class="performance-mode-hint" style="display: none;">
+                  Prioritises hardest questions mastered (lowest class %) for strengths and easiest missed questions (highest class %) for growth.
                 </div>
               </div>
             </div>
@@ -652,11 +711,40 @@
     </div>
   </div>
 
+  <!-- Comment Bank Method Chooser Modal -->
+  <div id="commentModeModal" class="modal-overlay" style="display: none;">
+    <div class="modal-card" style="width: min(92vw, 560px);">
+      <div class="modal-header">
+        <h3 class="modal-title">Choose Comment Bank Method</h3>
+        <button id="btnCloseCommentModeModal" class="btn-close" aria-label="Close modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.86rem; color: var(--text-muted); margin-top: 0; margin-bottom: 1rem;">
+          Select how you want to organise comments for this assessment. You can switch between methods anytime in Step 3.
+        </p>
+        <div class="mode-chooser-grid">
+          <button type="button" id="btnChooseModeQuestion" class="mode-chooser-card">
+            <strong style="font-size: 0.95rem; color: var(--text-main);">Comment per Question</strong>
+            <span style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+              Write achievements and improvements tagged to individual questions or sections.
+            </span>
+          </button>
+          <button type="button" id="btnChooseModeOutcome" class="mode-chooser-card">
+            <strong style="font-size: 0.95rem; color: var(--text-main);">Comment per Outcome</strong>
+            <span style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+              Define outcomes with 1 achievement &amp; 1 improvement each, then tag questions to outcomes.
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Application Logic -->
-  <script src="js/storage-service.js?v=20261113"></script>
-  <script src="js/excel-parser.js?v=20261113"></script>
-  <script src="js/comment-engine.js?v=20261113"></script>
-  <script src="js/comment-bank.js?v=20261113"></script>
-  <script src="app.js?v=20261113b"></script>
+  <script src="js/storage-service.js?v=20261123"></script>
+  <script src="js/excel-parser.js?v=20261123"></script>
+  <script src="js/comment-engine.js?v=20261123"></script>
+  <script src="js/comment-bank.js?v=20261123"></script>
+  <script src="app.js?v=20261123"></script>
 </body>
 </html>

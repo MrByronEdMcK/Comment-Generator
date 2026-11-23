@@ -187,6 +187,44 @@ class CommentEngine {
   }
 
   /**
+   * Helper: Canonical key for a question (section + id/title)
+   */
+  static getQuestionKey(q) {
+    return `${(q.section || 'General').trim().toLowerCase()}::${String(q.id || q.title || '').trim().toLowerCase()}`;
+  }
+
+  /**
+   * Compute class average percentage correct for each valid question across all students.
+   * Ignores blank / non-numeric student entries.
+   */
+  static computeQuestionAverages(students, questions) {
+    const averages = {};
+    const validQuestions = (questions || []).filter(q => !q.isSectionBreak && q.included !== false);
+    if (validQuestions.length === 0 || !Array.isArray(students) || students.length === 0) {
+      return averages;
+    }
+
+    validQuestions.forEach(q => {
+      const maxMarks = q.maxMarks || 1;
+      if (maxMarks <= 0) return;
+      let sum = 0;
+      let count = 0;
+      students.forEach(student => {
+        const val = CommentEngine.getQuestionScore(student, q);
+        if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+          sum += parseFloat(val);
+          count++;
+        }
+      });
+      if (count > 0) {
+        averages[CommentEngine.getQuestionKey(q)] = (sum / (count * maxMarks)) * 100;
+      }
+    });
+
+    return averages;
+  }
+
+  /**
    * Helper: Parse question expression into a list of normalized question IDs
    * Handles: "1,2, 4", "Q1, 2, 3", "7a, b", "7a, 7b", "1a, b, c", "1-3", "7a-c", "1a, 1b"
    */
@@ -477,9 +515,9 @@ class CommentEngine {
    * When enabled (enableScoreTiers = true): uses performance tiers and customizable thresholds.
    */
   static getTargetDistribution(pct, config = {}) {
-    if (config.enableScoreTiers === false) {
-      // By default: uniform comment count with no difference for higher/mid/lower scores
-      const total = parseInt(config.totalComments, 10) || 3;
+    if (!config.enableScoreTiers) {
+      // By default: uniform comment count (default: 6 -> 3/3 split) with no difference for higher/mid/lower scores
+      const total = parseInt(config.totalComments, 10) || 6;
       const targetAch = Math.max(1, Math.ceil(total / 2));
       const targetImp = Math.max(1, total - targetAch);
       return { targetAch, targetImp, total: targetAch + targetImp };
@@ -655,6 +693,14 @@ class CommentEngine {
    * 5. If criteria are insufficient, leaves remaining slots clean without canned placeholders.
    */
   static generateCommentsForStudent(student, questions, commentBank, config = {}, sectionRanking = []) {
+    if (
+      config.commentSourceMode === 'outcome' &&
+      Array.isArray(config.outcomes) &&
+      config.outcomes.length > 0
+    ) {
+      return CommentEngine.generateOutcomeCommentsForStudent(student, questions, config.outcomes, config);
+    }
+
     const analysis = CommentEngine.analyzeStudentPerformance(student, questions, commentBank);
 
     if (analysis.scoreSummary.isZeroOutOfZero) {
@@ -722,9 +768,21 @@ class CommentEngine {
       return matchedKey ? analysis.sectionScores[matchedKey] : null;
     };
 
-    const buildMatchedKeys = (matchedList) => matchedList.map(
-      q => `${(q.section || 'General').trim().toLowerCase()}::${String(q.id || q.title || '').trim().toLowerCase()}`
-    );
+    const buildMatchedKeys = (matchedList) => matchedList.map(q => CommentEngine.getQuestionKey(q));
+
+    const questionAverages = config.questionAverages || {};
+    const computeMatchedClassAvg = (matchedList) => {
+      let sum = 0;
+      let count = 0;
+      matchedList.forEach(q => {
+        const avg = questionAverages[CommentEngine.getQuestionKey(q)];
+        if (typeof avg === 'number' && !isNaN(avg)) {
+          sum += avg;
+          count++;
+        }
+      });
+      return count > 0 ? sum / count : null;
+    };
 
     // 1. Partition qualifying Achievements into section buckets
     parsedAchievements.forEach(a => {
@@ -755,6 +813,7 @@ class CommentEngine {
             achBySection[bucketKey].push({
               text: a.text,
               pct: matchPct,
+              classAvgPct: computeMatchedClassAvg(matched),
               isQuestion: true,
               matchedKeys: buildMatchedKeys(matched)
             });
@@ -806,6 +865,7 @@ class CommentEngine {
             impPrimaryBySection[bucketKey].push({
               text: i.text,
               pct: matchPct,
+              classAvgPct: computeMatchedClassAvg(matched),
               isQuestion: true,
               matchedKeys: buildMatchedKeys(matched)
             });
@@ -816,6 +876,7 @@ class CommentEngine {
             impPartialBySection[bucketKey].push({
               text: i.text,
               pct: matchPct,
+              classAvgPct: computeMatchedClassAvg(matched),
               isQuestion: true,
               matchedKeys: buildMatchedKeys(matched)
             });
@@ -945,19 +1006,117 @@ class CommentEngine {
       }
     };
 
-    const achState = { selected: [], seenNorms: new Set(), selectedKeys: new Set() };
-    fillFromTiers(achBySection, targetAch, achState, { preferFullFirst: true });
+    // Performance-Based Selection:
+    // Achievements: lowest classAvgPct first (hardest questions mastered)
+    // Improvements: highest classAvgPct first (easiest questions missed)
+    // Ties in classAvgPct are broken randomly via pre-shuffling; General/Section comments serve as fallback.
+    const fillByPerformance = (bySectionMap, targetCount, stateObj, options = {}) => {
+      const { forbiddenNorms = null, sortDirection = 'asc', avoidKeys = null } = options;
+      const { selected, seenNorms, selectedKeys } = stateObj;
+      if (targetCount <= 0 || selected.length >= targetCount) return;
 
-    const impState = { selected: [], seenNorms: new Set(), selectedKeys: new Set() };
-    fillFromTiers(impPrimaryBySection, targetImp, impState, { forbiddenNorms: achState.seenNorms });
-    if (impState.selected.length < targetImp) {
-      fillFromTiers(impPartialBySection, targetImp, impState, {
-        forbiddenNorms: achState.seenNorms,
-        avoidKeys: achState.selectedKeys
+      const available = [];
+      const localSeen = new Set();
+      Object.values(bySectionMap).forEach(bucket => {
+        (bucket || []).forEach(item => {
+          const norm = CommentEngine.normalizeText(item.text);
+          if (
+            norm &&
+            !seenNorms.has(norm) &&
+            (!forbiddenNorms || !forbiddenNorms.has(norm)) &&
+            !localSeen.has(norm)
+          ) {
+            localSeen.add(norm);
+            available.push(item);
+          }
+        });
       });
-    }
-    if (impState.selected.length < targetImp) {
-      fillFromTiers(impFallbackBySection, targetImp, impState, { forbiddenNorms: achState.seenNorms });
+
+      const sortByDifficulty = (items) => {
+        const shuffled = shuffleArray(items);
+        return shuffled.sort((a, b) => {
+          const aHas = typeof a.classAvgPct === 'number' && !isNaN(a.classAvgPct);
+          const bHas = typeof b.classAvgPct === 'number' && !isNaN(b.classAvgPct);
+          if (!aHas && !bHas) return 0;
+          if (!aHas) return 1;
+          if (!bHas) return -1;
+          if (Math.abs(a.classAvgPct - b.classAvgPct) < 1e-9) return 0;
+          return sortDirection === 'asc'
+            ? a.classAvgPct - b.classAvgPct
+            : b.classAvgPct - a.classAvgPct;
+        });
+      };
+
+      const qCandidates = available.filter(i => i.isQuestion);
+      const gCandidates = available.filter(i => !i.isQuestion);
+
+      let orderedQ;
+      if (avoidKeys && avoidKeys.size > 0) {
+        const nonOverlapping = qCandidates.filter(i => !(i.matchedKeys || []).some(k => avoidKeys.has(k)));
+        const overlapping = qCandidates.filter(i => (i.matchedKeys || []).some(k => avoidKeys.has(k)));
+        orderedQ = [...sortByDifficulty(nonOverlapping), ...sortByDifficulty(overlapping)];
+      } else {
+        orderedQ = sortByDifficulty(qCandidates);
+      }
+
+      for (const item of orderedQ) {
+        if (selected.length >= targetCount) break;
+        const norm = CommentEngine.normalizeText(item.text);
+        if (seenNorms.has(norm) || (forbiddenNorms && forbiddenNorms.has(norm))) continue;
+        seenNorms.add(norm);
+        selected.push(item.text);
+        (item.matchedKeys || []).forEach(k => selectedKeys.add(k));
+      }
+
+      if (selected.length < targetCount && gCandidates.length > 0) {
+        for (const item of orderCandidates(gCandidates)) {
+          if (selected.length >= targetCount) break;
+          const norm = CommentEngine.normalizeText(item.text);
+          if (!seenNorms.has(norm) && (!forbiddenNorms || !forbiddenNorms.has(norm))) {
+            seenNorms.add(norm);
+            selected.push(item.text);
+          }
+        }
+      }
+    };
+
+    const isPerformanceMode = config.commentPriorityMode === 'performance';
+    const achState = { selected: [], seenNorms: new Set(), selectedKeys: new Set() };
+    const impState = { selected: [], seenNorms: new Set(), selectedKeys: new Set() };
+
+    if (isPerformanceMode) {
+      fillByPerformance(achBySection, targetAch, achState, { sortDirection: 'asc' });
+
+      fillByPerformance(impPrimaryBySection, targetImp, impState, {
+        forbiddenNorms: achState.seenNorms,
+        sortDirection: 'desc'
+      });
+      if (impState.selected.length < targetImp) {
+        fillByPerformance(impPartialBySection, targetImp, impState, {
+          forbiddenNorms: achState.seenNorms,
+          avoidKeys: achState.selectedKeys,
+          sortDirection: 'desc'
+        });
+      }
+      if (impState.selected.length < targetImp) {
+        fillByPerformance(impFallbackBySection, targetImp, impState, {
+          forbiddenNorms: achState.seenNorms,
+          sortDirection: 'desc'
+        });
+      }
+    } else {
+      fillFromTiers(achBySection, targetAch, achState, { preferFullFirst: true });
+
+      fillFromTiers(impPrimaryBySection, targetImp, impState, { forbiddenNorms: achState.seenNorms });
+      if (impState.selected.length < targetImp) {
+        fillFromTiers(impPartialBySection, targetImp, impState, {
+          forbiddenNorms: achState.seenNorms,
+          avoidKeys: achState.selectedKeys
+        });
+      }
+      if (impState.selected.length < targetImp) {
+        fillFromTiers(impFallbackBySection, targetImp, impState, { forbiddenNorms: achState.seenNorms });
+      }
     }
 
     const selectedAch = achState.selected;
@@ -967,12 +1126,214 @@ class CommentEngine {
       return "";
     }
 
-    const achOutput = selectedAch.length > 0
-      ? `Achievements:\n${selectedAch.join('\n')}`
+    const paddedAch = [...selectedAch];
+    for (let i = paddedAch.length + 1; i <= targetAch; i++) {
+      paddedAch.push(`[Missing Achievement ${i}]`);
+    }
+
+    const paddedImp = [...selectedImp];
+    for (let i = paddedImp.length + 1; i <= targetImp; i++) {
+      paddedImp.push(`[Missing Improvement ${i}]`);
+    }
+
+    const achOutput = paddedAch.length > 0
+      ? `Achievements:\n${paddedAch.join('\n')}`
       : `Achievements:\n(None qualified from bank)`;
 
-    const impOutput = selectedImp.length > 0
-      ? `Improvements:\n${selectedImp.join('\n')}`
+    const impOutput = paddedImp.length > 0
+      ? `Improvements:\n${paddedImp.join('\n')}`
+      : `Improvements:\n(None qualified from bank)`;
+
+    return `${achOutput}\n\n${impOutput}`;
+  }
+
+  /**
+   * Compute class average percentage correct for each outcome across all students,
+   * aggregating obtained marks / max marks across all questions tagged to the outcome.
+   */
+  static computeOutcomeAverages(students, questions, outcomes) {
+    const averages = {};
+    const validQuestions = (questions || []).filter(q => !q.isSectionBreak && q.included !== false && (q.maxMarks || 1) > 0);
+    if (!Array.isArray(outcomes) || outcomes.length === 0 || validQuestions.length === 0 || !Array.isArray(students) || students.length === 0) {
+      return averages;
+    }
+
+    const questionByKey = {};
+    validQuestions.forEach(q => {
+      questionByKey[CommentEngine.getQuestionKey(q)] = q;
+    });
+
+    outcomes.forEach(outcome => {
+      const taggedKeys = Array.isArray(outcome.questionKeys) ? outcome.questionKeys : [];
+      const taggedQuestions = taggedKeys.map(k => questionByKey[k]).filter(Boolean);
+      if (taggedQuestions.length === 0) return;
+
+      let pctSum = 0;
+      let studentCount = 0;
+      students.forEach(student => {
+        let obtained = 0;
+        let max = 0;
+        let numericCount = 0;
+        taggedQuestions.forEach(q => {
+          const val = CommentEngine.getQuestionScore(student, q);
+          if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+            obtained += parseFloat(val);
+            numericCount++;
+          }
+          max += q.maxMarks || 1;
+        });
+        if (numericCount > 0 && max > 0) {
+          pctSum += (obtained / max) * 100;
+          studentCount++;
+        }
+      });
+
+      if (studentCount > 0) {
+        averages[outcome.id] = pctSum / studentCount;
+      }
+    });
+
+    return averages;
+  }
+
+  /**
+   * Outcome-Based Generator: Selects achievement & improvement comments per outcome
+   * using aggregated marks across all questions tagged to each outcome.
+   * Enforces duplicate-outcome and duplicate-text safeguards.
+   */
+  static generateOutcomeCommentsForStudent(student, questions, outcomes, config = {}) {
+    const analysis = CommentEngine.analyzeStudentPerformance(student, questions, null);
+    if (analysis.scoreSummary.isZeroOutOfZero) {
+      return "Incomplete due to absences";
+    }
+
+    const pct = analysis.scoreSummary.percentage;
+    const { targetAch, targetImp } = CommentEngine.getTargetDistribution(pct, config);
+    const cutoff = Number(config.outcomeMasteryCutoff ?? 70);
+    const outcomeAverages = config.outcomeAverages || {};
+
+    const questionByKey = {};
+    analysis.validQuestions.forEach(q => {
+      questionByKey[CommentEngine.getQuestionKey(q)] = q;
+    });
+
+    const achCandidates = [];
+    const impCandidates = [];
+
+    (outcomes || []).forEach(outcome => {
+      const taggedKeys = Array.isArray(outcome.questionKeys) ? outcome.questionKeys : [];
+      const taggedQuestions = taggedKeys.map(k => questionByKey[k]).filter(Boolean);
+      if (taggedQuestions.length === 0) return;
+
+      let obtained = 0;
+      let max = 0;
+      let numericCount = 0;
+      taggedQuestions.forEach(q => {
+        const val = CommentEngine.getQuestionScore(student, q);
+        if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+          obtained += parseFloat(val);
+          numericCount++;
+        }
+        max += q.maxMarks || 1;
+      });
+
+      if (numericCount === 0 || max <= 0) return;
+
+      const studentOutcomePct = (obtained / max) * 100;
+      const classAvgPct = typeof outcomeAverages[outcome.id] === 'number' ? outcomeAverages[outcome.id] : null;
+      const achText = (outcome.achievement || '').trim();
+      const impText = (outcome.improvement || '').trim();
+
+      if (studentOutcomePct >= cutoff && achText) {
+        achCandidates.push({ id: outcome.id, text: achText, classAvgPct, studentPct: studentOutcomePct });
+      } else if (studentOutcomePct < cutoff && impText) {
+        impCandidates.push({ id: outcome.id, text: impText, classAvgPct, studentPct: studentOutcomePct });
+      }
+    });
+
+    const shuffle = (arr) => {
+      const copy = [...arr];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    };
+
+    const previousNorms = new Set();
+    if (config.currentComment && typeof config.currentComment === 'string') {
+      config.currentComment.split(/\r?\n+/).forEach(line => {
+        const cleaned = line.replace(/Achievements:\s*/gi, '').replace(/Improvements:\s*/gi, '').trim();
+        if (cleaned) {
+          const norm = CommentEngine.normalizeText(cleaned);
+          if (norm) previousNorms.add(norm);
+        }
+      });
+    }
+
+    const isPerfMode = config.commentPriorityMode === 'performance';
+    const orderItems = (items, sortDirection) => {
+      if (isPerfMode) {
+        return shuffle(items).sort((a, b) => {
+          const aHas = typeof a.classAvgPct === 'number' && !isNaN(a.classAvgPct);
+          const bHas = typeof b.classAvgPct === 'number' && !isNaN(b.classAvgPct);
+          if (!aHas && !bHas) return 0;
+          if (!aHas) return 1;
+          if (!bHas) return -1;
+          if (Math.abs(a.classAvgPct - b.classAvgPct) < 1e-9) return 0;
+          return sortDirection === 'asc'
+            ? a.classAvgPct - b.classAvgPct
+            : b.classAvgPct - a.classAvgPct;
+        });
+      }
+      const unused = items.filter(c => !previousNorms.has(CommentEngine.normalizeText(c.text)));
+      const used = items.filter(c => previousNorms.has(CommentEngine.normalizeText(c.text)));
+      return [...shuffle(unused), ...shuffle(used)];
+    };
+
+    const selectedAch = [];
+    const selectedImp = [];
+    const seenNorms = new Set();
+    const usedOutcomeIds = new Set();
+
+    for (const item of orderItems(achCandidates, 'asc')) {
+      if (selectedAch.length >= targetAch) break;
+      const norm = CommentEngine.normalizeText(item.text);
+      if (!norm || seenNorms.has(norm) || usedOutcomeIds.has(item.id)) continue;
+      seenNorms.add(norm);
+      usedOutcomeIds.add(item.id);
+      selectedAch.push(item.text);
+    }
+
+    for (const item of orderItems(impCandidates, 'desc')) {
+      if (selectedImp.length >= targetImp) break;
+      const norm = CommentEngine.normalizeText(item.text);
+      if (!norm || seenNorms.has(norm) || usedOutcomeIds.has(item.id)) continue;
+      seenNorms.add(norm);
+      usedOutcomeIds.add(item.id);
+      selectedImp.push(item.text);
+    }
+
+    if (selectedAch.length === 0 && selectedImp.length === 0) {
+      return "";
+    }
+
+    const paddedAch = [...selectedAch];
+    for (let i = paddedAch.length + 1; i <= targetAch; i++) {
+      paddedAch.push(`[Missing Achievement ${i}]`);
+    }
+
+    const paddedImp = [...selectedImp];
+    for (let i = paddedImp.length + 1; i <= targetImp; i++) {
+      paddedImp.push(`[Missing Improvement ${i}]`);
+    }
+
+    const achOutput = paddedAch.length > 0
+      ? `Achievements:\n${paddedAch.join('\n')}`
+      : `Achievements:\n(None qualified from bank)`;
+
+    const impOutput = paddedImp.length > 0
+      ? `Improvements:\n${paddedImp.join('\n')}`
       : `Improvements:\n(None qualified from bank)`;
 
     return `${achOutput}\n\n${impOutput}`;
@@ -984,9 +1345,14 @@ class CommentEngine {
   static generateCommentsForAll(students, questions, commentBank, config = {}, sectionRanking = []) {
     const results = {};
     const validQuestions = (questions || []).filter(q => !q.isSectionBreak && q.included !== false);
+    const questionAverages = config.questionAverages || CommentEngine.computeQuestionAverages(students, validQuestions);
+    const outcomeAverages = (config.commentSourceMode === 'outcome' && Array.isArray(config.outcomes))
+      ? (config.outcomeAverages || CommentEngine.computeOutcomeAverages(students, validQuestions, config.outcomes))
+      : config.outcomeAverages;
+    const mergedConfig = { ...config, questionAverages, outcomeAverages };
 
     (students || []).forEach(student => {
-      const cmt = CommentEngine.generateCommentsForStudent(student, validQuestions, commentBank, config, sectionRanking);
+      const cmt = CommentEngine.generateCommentsForStudent(student, validQuestions, commentBank, mergedConfig, sectionRanking);
       results[student.id] = cmt;
     });
 

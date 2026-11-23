@@ -88,9 +88,14 @@ class CommentBank {
   }
 
   toJSON() {
+    const cloneEntry = (entry) => ({
+      ...entry,
+      tags: Array.isArray(entry.tags) ? [...entry.tags] : [],
+      questionIds: Array.isArray(entry.questionIds) ? [...entry.questionIds] : []
+    });
     return {
-      achievements: this.achievements,
-      improvements: this.improvements
+      achievements: (this.achievements || []).map(cloneEntry),
+      improvements: (this.improvements || []).map(cloneEntry)
     };
   }
 
@@ -101,8 +106,17 @@ class CommentBank {
     }
     try {
       const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-      this.achievements = (parsed.achievements && Array.isArray(parsed.achievements)) ? parsed.achievements : [];
-      this.improvements = (parsed.improvements && Array.isArray(parsed.improvements)) ? parsed.improvements : [];
+      const cloneEntry = (entry) => ({
+        ...entry,
+        tags: Array.isArray(entry.tags) ? [...entry.tags] : [],
+        questionIds: Array.isArray(entry.questionIds) ? [...entry.questionIds] : []
+      });
+      this.achievements = (parsed.achievements && Array.isArray(parsed.achievements))
+        ? parsed.achievements.map(cloneEntry)
+        : [];
+      this.improvements = (parsed.improvements && Array.isArray(parsed.improvements))
+        ? parsed.improvements.map(cloneEntry)
+        : [];
     } catch (e) {
       console.warn('Failed to load comment bank state:', e);
       this.clearAll();

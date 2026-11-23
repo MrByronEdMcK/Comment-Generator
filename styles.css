@@ -1370,6 +1370,174 @@ input[type="number"].config-num-input-large,
   gap: 0.75rem;
 }
 
+.priority-mode-segmented {
+  display: inline-flex;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.2rem;
+  gap: 0.2rem;
+}
+
+.priority-mode-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.32rem 0.7rem;
+  border-radius: calc(var(--radius-md) - 2px);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.priority-mode-btn:hover {
+  color: var(--text-main);
+}
+
+.priority-mode-btn.active {
+  background: var(--primary);
+  color: #fff;
+}
+
+.performance-mode-hint {
+  margin-top: 0.65rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Comment per Outcome Bank & Mode Chooser */
+.mode-chooser-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.85rem;
+}
+
+.mode-chooser-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 0.35rem;
+  padding: 1rem;
+  background: var(--bg-subtle);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+
+.mode-chooser-card:hover {
+  border-color: var(--primary);
+  background: var(--bg-card);
+  transform: translateY(-1px);
+}
+
+.outcome-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+}
+
+.outcomes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.outcome-card {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.outcome-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.outcome-name-input {
+  flex: 1;
+  min-width: 200px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.outcome-comments-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.75rem;
+}
+
+.outcome-comment-field label {
+  display: block;
+  font-size: 0.76rem;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+.outcome-tag-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.outcome-tag-label {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding-top: 0.28rem;
+  white-space: nowrap;
+}
+
+.outcome-tag-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.outcome-q-pill {
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.outcome-q-pill:hover {
+  border-color: var(--primary);
+  color: var(--text-main);
+}
+
+.outcome-q-pill.selected {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
 .section-priority-board {
   display: flex;
   flex-direction: column;
