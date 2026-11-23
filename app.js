@@ -3775,7 +3775,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) return false;
         const rect = el.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) return false;
-        if (rect.right < 0 || rect.bottom < 0 || rect.left > window.innerWidth + 100 || rect.top > window.innerHeight + 100) return false;
+        if (rect.right < 0 || rect.bottom < 0) return false;
         return true;
     }
 
@@ -3794,34 +3794,45 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function findModalSaveCloseButton(modalRoot, allowCloseOnly = false) {
-        const root = modalRoot || document;
-        const rawCandidates = Array.from(root.querySelectorAll('button, .x-btn, a[role="button"], span.x-btn-inner'));
-        const deduped = [];
-        const seenClickable = new Set();
+        const searchInScope = (scope) => {
+            const rawCandidates = Array.from(scope.querySelectorAll('button, .x-btn, a[role="button"], [role="button"], span.x-btn-inner, span.x-btn-button, input[type="button"], input[type="submit"]'));
+            const deduped = [];
+            const seenClickable = new Set();
 
-        for (const el of rawCandidates) {
-            if (!isElementVisible(el)) continue;
-            const clickable = el.closest('a, button, .x-btn') || el;
-            if (!isElementVisible(clickable) || seenClickable.has(clickable)) continue;
-            const label = (clickable.innerText || clickable.textContent || '').replace(/\\s+/g, ' ').trim().toLowerCase();
-            if (!label) continue;
-            // NEVER click "Save and Next" / "Save & Next" or any "Next" button
-            if (label.includes('next')) continue;
-            seenClickable.add(clickable);
-            deduped.push({ el: clickable, label });
+            for (const el of rawCandidates) {
+                if (!isElementVisible(el)) continue;
+                const clickable = el.closest('a, button, .x-btn, [role="button"]') || el;
+                if (!isElementVisible(clickable) || seenClickable.has(clickable)) continue;
+                const rawLabel = clickable.innerText || clickable.textContent || clickable.value || el.innerText || el.textContent || '';
+                const label = rawLabel.replace(/\\s+/g, ' ').trim().toLowerCase();
+                if (!label) continue;
+                // NEVER click "Save and Next" / "Save & Next" or any "Next" button
+                if (label.includes('next')) continue;
+                seenClickable.add(clickable);
+                deduped.push({ el: clickable, label });
+            }
+
+            // Reverse so that the topmost/latest modal in DOM order takes precedence over background page buttons
+            const reversed = [...deduped].reverse();
+
+            const saveAndClose = reversed.find(b => b.label.includes('save') && b.label.includes('close'));
+            if (saveAndClose) return saveAndClose.el;
+
+            const saveOnly = reversed.find(b => b.label === 'save' || (b.label.includes('save') && !b.label.includes('cancel') && !b.label.includes('reset')));
+            if (saveOnly) return saveOnly.el;
+
+            if (allowCloseOnly) {
+                const closeBtn = reversed.find(b => b.label === 'close' || b.label === 'cancel' || b.label.includes('close'));
+                if (closeBtn) return closeBtn.el;
+            }
+            return null;
+        };
+
+        if (modalRoot && modalRoot !== document) {
+            const foundInModal = searchInScope(modalRoot);
+            if (foundInModal) return foundInModal;
         }
-
-        const saveAndClose = deduped.find(b => b.label.includes('save') && b.label.includes('close'));
-        if (saveAndClose) return saveAndClose.el;
-
-        const saveOnly = deduped.find(b => b.label === 'save' || (b.label.includes('save') && !b.label.includes('cancel') && !b.label.includes('reset')));
-        if (saveOnly) return saveOnly.el;
-
-        if (allowCloseOnly) {
-            const closeBtn = deduped.find(b => b.label === 'close' || b.label === 'cancel' || b.label.includes('close'));
-            if (closeBtn) return closeBtn.el;
-        }
-        return null;
+        return searchInScope(document);
     }
 
     async function waitForModalToClose(modalInput, maxWaitMs = 900) {
@@ -3831,6 +3842,14 @@ document.addEventListener('DOMContentLoaded', () => {
             await new Promise(r => setTimeout(r, 80));
         }
         return !isElementVisible(modalInput);
+    }
+
+    function clickModalButton(btn) {
+        if (!btn) return;
+        btn.click();
+        btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+        btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+        btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
     }
 
     async function editCell(cell, value, colName, studentName) {
@@ -3869,7 +3888,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const modalInput = visibleModalTextareas[visibleModalTextareas.length - 1];
 
         if (modalInput) {
-            const modalRoot = modalInput.closest('.x-window, [role="dialog"], .modal, .x-panel') || document;
+            const modalRoot = modalInput.closest('.x-window, [role="dialog"], .modal, .x-layer') || document;
             const modalExisting = modalInput.value || '';
             const matchesModal = modalExisting.trim() !== '' && (
                 normalizeMultiline(modalExisting) === normalizeMultiline(cleanValue) ||
@@ -3880,7 +3899,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log(\`⏩ Text already present & matches in [\${colName}] for \${studentName} - Saving and closing without editing.\`);
                 const btn = findModalSaveCloseButton(modalRoot, true);
                 if (btn) {
-                    btn.click();
+                    clickModalButton(btn);
                 } else {
                     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true }));
                 }
@@ -3901,16 +3920,17 @@ document.addEventListener('DOMContentLoaded', () => {
             modalInput.value = cleanValue;
             modalInput.dispatchEvent(new Event('input', { bubbles: true }));
             modalInput.dispatchEvent(new Event('change', { bubbles: true }));
+            modalInput.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', code: 'Space', keyCode: 32, bubbles: true }));
 
             await new Promise(r => setTimeout(r, 200));
 
             const saveCloseBtn = findModalSaveCloseButton(modalRoot, false);
             if (saveCloseBtn) {
-                saveCloseBtn.click();
+                clickModalButton(saveCloseBtn);
                 const closed = await waitForModalToClose(modalInput, 600);
                 if (!closed && isElementVisible(saveCloseBtn)) {
-                    saveCloseBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-                    saveCloseBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+                    const innerBtn = saveCloseBtn.querySelector('button, a, .x-btn-inner, .x-btn-button') || saveCloseBtn;
+                    clickModalButton(innerBtn);
                     await waitForModalToClose(modalInput, 600);
                 }
             } else {
