@@ -55,6 +55,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const outcomesListEl = document.getElementById('outcomesList');
   const outcomeCountBadge = document.getElementById('outcomeCountBadge');
   const cfgOutcomeCutoff = document.getElementById('cfgOutcomeCutoff');
+  const btnExportOutcomeBank = document.getElementById('btnExportOutcomeBank');
+  const btnImportOutcomeBank = document.getElementById('btnImportOutcomeBank');
+  const importOutcomeBankInput = document.getElementById('importOutcomeBankInput');
   const btnBulkPasteOutcomes = document.getElementById('btnBulkPasteOutcomes');
   const btnAddOutcome = document.getElementById('btnAddOutcome');
   const btnAddOutcomeBottom = document.getElementById('btnAddOutcomeBottom');
@@ -2365,7 +2368,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     state.outcomes.forEach((outcome, idx) => {
       const card = document.createElement('div');
-      card.className = 'outcome-card';
+      card.className = `outcome-card${outcome.needsQuestionSelection ? ' needs-question-selection' : ''}`;
       const taggedSet = new Set(Array.isArray(outcome.questionKeys) ? outcome.questionKeys : []);
 
       const header = document.createElement('div');
@@ -2387,6 +2390,14 @@ document.addEventListener('DOMContentLoaded', () => {
       taggedBadge.className = 'config-box-badge';
       taggedBadge.textContent = `${taggedSet.size} Qs`;
 
+      let unmatchedBadge = null;
+      if (outcome.needsQuestionSelection) {
+        unmatchedBadge = document.createElement('span');
+        unmatchedBadge.className = 'outcome-unmatched-badge';
+        unmatchedBadge.textContent = '⚠️ Select questions';
+        unmatchedBadge.title = 'Saved questions for this outcome did not match the questions in this assessment. Please select the matching questions below.';
+      }
+
       const delBtn = document.createElement('button');
       delBtn.type = 'button';
       delBtn.className = 'btn btn-danger btn-sm';
@@ -2399,6 +2410,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       header.appendChild(nameInput);
+      if (unmatchedBadge) header.appendChild(unmatchedBadge);
       header.appendChild(taggedBadge);
       header.appendChild(delBtn);
 
@@ -2482,6 +2494,11 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
               outcome.questionKeys.push(qKey);
               pill.classList.add('selected');
+            }
+            if (outcome.needsQuestionSelection && outcome.questionKeys.length > 0) {
+              delete outcome.needsQuestionSelection;
+              card.classList.remove('needs-question-selection');
+              if (unmatchedBadge) unmatchedBadge.remove();
             }
             taggedBadge.textContent = `${outcome.questionKeys.length} Qs`;
             triggerAutoSave();
@@ -2613,6 +2630,179 @@ document.addEventListener('DOMContentLoaded', () => {
       renderStep3Outcomes();
       syncGenerationConfigUI();
       triggerAutoSave();
+    });
+  }
+
+  function exportOutcomeBank() {
+    if (!state.outcomes || state.outcomes.length === 0) {
+      alert('No outcomes to export.');
+      return;
+    }
+
+    const validQuestions = (state.questions || []).filter(q => !q.isSectionBreak && q.included !== false);
+    const labelByKey = {};
+    validQuestions.forEach(q => {
+      labelByKey[CommentEngine.getQuestionKey(q)] = q.id || q.title || '';
+    });
+
+    const assessName = (assessmentSelect && assessmentSelect.selectedIndex >= 0
+      ? assessmentSelect.options[assessmentSelect.selectedIndex]?.text
+      : (StorageService.getAssessmentById(currentClassId, currentAssessmentId)?.name || 'Assessment')) || 'Assessment';
+
+    const payload = {
+      version: '1.0',
+      exportType: 'outcome_comment_bank',
+      timestamp: Date.now(),
+      exportedAt: new Date().toISOString(),
+      outcomeMasteryCutoff: state.generationConfig.outcomeMasteryCutoff ?? 70,
+      outcomes: state.outcomes.map(o => {
+        const qKeys = Array.isArray(o.questionKeys) ? [...o.questionKeys] : [];
+        return {
+          id: o.id,
+          name: o.name || '',
+          achievement: o.achievement || '',
+          improvement: o.improvement || '',
+          questionKeys: qKeys,
+          questionLabels: qKeys.map(k => labelByKey[k] || (k.split('::')[1] || k))
+        };
+      })
+    };
+
+    const safeAssess = assessName.replace(/[^a-zA-Z0-9_\-]/g, '_');
+    const dateStr = new Date().toISOString().slice(0, 10);
+    StorageService.downloadJSON(payload, `Outcome_Bank_${safeAssess}_${dateStr}.json`);
+  }
+
+  function importOutcomeBankFromParsed(parsed) {
+    if (!parsed || !Array.isArray(parsed.outcomes) || parsed.outcomes.length === 0) {
+      alert('Invalid Outcome Bank JSON file: no outcomes found.');
+      return;
+    }
+
+    const hasNonEmptyExisting = state.outcomes.some(o =>
+      (o.name || '').trim() ||
+      (o.achievement || '').trim() ||
+      (o.improvement || '').trim() ||
+      (Array.isArray(o.questionKeys) && o.questionKeys.length > 0)
+    );
+
+    let replaceMode = true;
+    if (hasNonEmptyExisting) {
+      const mergeChoice = confirm('Importing Outcome Comment Bank:\n\nClick OK to MERGE with existing outcomes.\nClick Cancel to REPLACE existing outcomes.');
+      replaceMode = !mergeChoice;
+    }
+
+    const validQuestions = (state.questions || []).filter(q => !q.isSectionBreak && q.included !== false);
+    const validKeySet = new Set();
+    const keyByIdLower = {};
+    validQuestions.forEach(q => {
+      const k = CommentEngine.getQuestionKey(q);
+      validKeySet.add(k);
+      const idLower = String(q.id || q.title || '').trim().toLowerCase();
+      if (idLower && !keyByIdLower[idLower]) {
+        keyByIdLower[idLower] = k;
+      }
+    });
+
+    const unmatchedOutcomeNames = [];
+    const importedOutcomes = parsed.outcomes.map((inO, idx) => {
+      const rawKeys = Array.isArray(inO.questionKeys) ? inO.questionKeys : [];
+      const rawLabels = Array.isArray(inO.questionLabels) ? inO.questionLabels : [];
+      const candidateTokens = rawKeys.length > 0 ? rawKeys : rawLabels;
+
+      const matchedKeys = [];
+      let hadUnmatched = false;
+
+      candidateTokens.forEach((tok, tIdx) => {
+        const strTok = String(tok || '').trim().toLowerCase();
+        if (!strTok) return;
+        if (validKeySet.has(strTok)) {
+          if (!matchedKeys.includes(strTok)) matchedKeys.push(strTok);
+          return;
+        }
+        const idPart = strTok.includes('::') ? strTok.split('::')[1] : strTok;
+        const labelFallback = rawLabels[tIdx] ? String(rawLabels[tIdx]).trim().toLowerCase() : idPart;
+        const resolved = keyByIdLower[idPart] || keyByIdLower[labelFallback];
+        if (resolved) {
+          if (!matchedKeys.includes(resolved)) matchedKeys.push(resolved);
+        } else {
+          hadUnmatched = true;
+        }
+      });
+
+      const needsSelection = hadUnmatched || (validQuestions.length > 0 && matchedKeys.length === 0);
+      const outcomeName = (inO.name || '').trim() || `Outcome ${idx + 1}`;
+      if (needsSelection) {
+        unmatchedOutcomeNames.push(outcomeName);
+      }
+
+      return {
+        id: inO.id || `out_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`,
+        name: inO.name || '',
+        achievement: inO.achievement || '',
+        improvement: inO.improvement || '',
+        questionKeys: matchedKeys,
+        ...(needsSelection ? { needsQuestionSelection: true } : {})
+      };
+    });
+
+    if (typeof parsed.outcomeMasteryCutoff === 'number' && !isNaN(parsed.outcomeMasteryCutoff)) {
+      state.generationConfig.outcomeMasteryCutoff = Math.max(0, Math.min(100, parsed.outcomeMasteryCutoff));
+    }
+
+    if (replaceMode) {
+      state.outcomes = importedOutcomes;
+    } else {
+      state.outcomes.push(...importedOutcomes);
+    }
+
+    state.commentBankMode = 'outcome';
+    state.generationConfig.commentSourceMode = 'outcome';
+    renderStep3CommentBank();
+    syncGenerationConfigUI();
+    triggerAutoSave();
+
+    if (unmatchedOutcomeNames.length > 0) {
+      requestAnimationFrame(() => {
+        const firstFlagged = outcomesListEl ? outcomesListEl.querySelector('.outcome-card.needs-question-selection') : null;
+        if (firstFlagged) {
+          firstFlagged.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+      const previewList = unmatchedOutcomeNames.slice(0, 8).map(n => `• ${n}`).join('\n');
+      const moreCount = unmatchedOutcomeNames.length > 8 ? `\n...and ${unmatchedOutcomeNames.length - 8} more` : '';
+      alert(
+        `Imported ${importedOutcomes.length} outcome(s).\n\n` +
+        `⚠️ Some tagged questions did not match the questions in this assessment for ${unmatchedOutcomeNames.length} outcome(s):\n` +
+        `${previewList}${moreCount}\n\n` +
+        `Please select the questions manually for the highlighted outcome(s).`
+      );
+    } else {
+      alert(`Outcome Comment Bank imported successfully (${importedOutcomes.length} outcomes)!`);
+    }
+  }
+
+  if (btnExportOutcomeBank) {
+    btnExportOutcomeBank.addEventListener('click', exportOutcomeBank);
+  }
+  if (btnImportOutcomeBank && importOutcomeBankInput) {
+    btnImportOutcomeBank.addEventListener('click', () => {
+      importOutcomeBankInput.value = '';
+      importOutcomeBankInput.click();
+    });
+    importOutcomeBankInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const parsed = JSON.parse(evt.target.result);
+          importOutcomeBankFromParsed(parsed);
+        } catch (err) {
+          alert(`Failed to import Outcome Bank JSON file:\n${err.message}`);
+        }
+      };
+      reader.readAsText(file);
     });
   }
 
@@ -2852,6 +3042,10 @@ document.addEventListener('DOMContentLoaded', () => {
       reader.onload = (evt) => {
         try {
           const parsed = JSON.parse(evt.target.result);
+          if (parsed.exportType === 'outcome_comment_bank' || Array.isArray(parsed.outcomes)) {
+            importOutcomeBankFromParsed(parsed);
+            return;
+          }
           const fileSec = (parsed.section && parsed.section !== 'All') ? parsed.section : null;
           const targetSec = fileSec || activeCommentBankSection;
           const secLabel = targetSec === 'General' ? 'General Comments' : targetSec;

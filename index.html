@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   
   <!-- Custom Design System Stylesheet -->
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20261123c">
 
   <!-- SheetJS Spreadsheet Parser -->
   <script src="vendor/xlsx.full.min.js"></script>
@@ -292,11 +292,20 @@
                 </span>
                 <label style="display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; font-weight: 600; color: var(--text-muted);">
                   <span>Mastery Cutoff:</span>
-                  <input type="number" id="cfgOutcomeCutoff" class="config-num-input" value="70" min="0" max="100" step="1" style="width: 58px;">
+                  <input type="number" id="cfgOutcomeCutoff" class="config-num-input" value="70" min="0" max="100" step="1">
                   <span>%</span>
                 </label>
               </div>
               <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                <button type="button" id="btnExportOutcomeBank" class="btn btn-secondary btn-sm" title="Download outcomes and tagged questions as JSON">
+                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                  <span>Export Bank</span>
+                </button>
+                <button type="button" id="btnImportOutcomeBank" class="btn btn-secondary btn-sm" title="Import outcomes and tagged questions from JSON file">
+                  <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                  <span>Import Bank</span>
+                </button>
+                <input type="file" id="importOutcomeBankInput" accept=".json" hidden>
                 <button type="button" id="btnBulkPasteOutcomes" class="btn btn-secondary btn-sm">Bulk Paste</button>
                 <button type="button" id="btnAddOutcome" class="btn btn-primary btn-sm">+ Add Outcome</button>
                 <button type="button" id="btnClearOutcomes" class="btn btn-danger btn-sm">Clear Outcomes</button>
@@ -763,10 +772,10 @@
   </div>
 
   <!-- Application Logic -->
-  <script src="js/storage-service.js?v=20261123b"></script>
-  <script src="js/excel-parser.js?v=20261123b"></script>
-  <script src="js/comment-engine.js?v=20261123b"></script>
-  <script src="js/comment-bank.js?v=20261123b"></script>
-  <script src="app.js?v=20261123b"></script>
+  <script src="js/storage-service.js?v=20261123c"></script>
+  <script src="js/excel-parser.js?v=20261123c"></script>
+  <script src="js/comment-engine.js?v=20261123c"></script>
+  <script src="js/comment-bank.js?v=20261123c"></script>
+  <script src="app.js?v=20261123c"></script>
 </body>
 </html>

@@ -1339,10 +1339,11 @@ input[type="number"].config-num-input-large,
   white-space: nowrap;
 }
 
+input[type="number"].config-num-input,
 .config-num-input {
-  width: 52px;
+  width: 68px;
   text-align: center;
-  padding: 0.3rem 0.25rem;
+  padding: 0.32rem 0.35rem;
   font-weight: 600;
   border-radius: var(--radius-sm);
 }
@@ -1536,6 +1537,24 @@ input[type="number"].config-num-input-large,
   background: var(--primary);
   border-color: var(--primary);
   color: #fff;
+}
+
+.outcome-card.needs-question-selection {
+  border-color: var(--warning-text);
+  box-shadow: 0 0 0 2px rgba(184, 115, 32, 0.14);
+}
+
+.outcome-unmatched-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.18rem 0.55rem;
+  border-radius: var(--radius-full);
+  background: var(--warning-light);
+  color: var(--warning-text);
+  border: 1px solid rgba(184, 115, 32, 0.35);
 }
 
 .section-priority-board {
