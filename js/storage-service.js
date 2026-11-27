@@ -139,6 +139,65 @@ class StorageService {
   }
 
   /**
+   * Delete an Assessment by Class ID and Assessment ID
+   * @param {string} classId
+   * @param {string} assessmentId
+   */
+  static deleteAssessment(classId, assessmentId) {
+    const classObj = this.getClassById(classId);
+    if (!classObj || !Array.isArray(classObj.assessments)) return false;
+    classObj.assessments = classObj.assessments.filter(a => a.id !== assessmentId);
+    this.saveClass(classObj);
+    return true;
+  }
+
+  /**
+   * Duplicate an Assessment (either into the same class or a different target class).
+   * Copies question structure, comment bank, outcomes, section ranking, and generation config.
+   * Optionally copies student scores and generated comments.
+   */
+  static duplicateAssessment(sourceClassId, sourceAssessmentId, {
+    targetClassId = null,
+    newName = null,
+    includeStudents = false
+  } = {}) {
+    const sourceAssess = this.getAssessmentById(sourceClassId, sourceAssessmentId);
+    if (!sourceAssess) return null;
+
+    const destClassId = targetClassId || sourceClassId;
+    const destClass = this.getClassById(destClassId);
+    if (!destClass) return null;
+
+    const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
+
+    const duplicatePayload = {
+      id: `assess_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: (newName && newName.trim()) ? newName.trim() : `${sourceAssess.name} (Copy)`,
+      spreadsheetName: includeStudents ? sourceAssess.spreadsheetName : null,
+      availableSheets: includeStudents && sourceAssess.availableSheets ? deepClone(sourceAssess.availableSheets) : null,
+      selectedSheet: includeStudents ? sourceAssess.selectedSheet : null,
+      questions: Array.isArray(sourceAssess.questions) ? deepClone(sourceAssess.questions) : [],
+      commentBank: sourceAssess.commentBank ? deepClone(sourceAssess.commentBank) : { achievements: [], improvements: [] },
+      commentBankMode: sourceAssess.commentBankMode || null,
+      outcomes: Array.isArray(sourceAssess.outcomes) ? deepClone(sourceAssess.outcomes) : [],
+      sectionRanking: Array.isArray(sourceAssess.sectionRanking) ? deepClone(sourceAssess.sectionRanking) : [],
+      generationConfig: sourceAssess.generationConfig ? deepClone(sourceAssess.generationConfig) : null,
+      students: includeStudents && Array.isArray(sourceAssess.students) ? deepClone(sourceAssess.students) : [],
+      generatedComments: includeStudents && sourceAssess.generatedComments ? deepClone(sourceAssess.generatedComments) : {},
+      currentStep: includeStudents ? (sourceAssess.currentStep || 4) : (sourceAssess.questions?.length > 0 ? 3 : 1)
+    };
+
+    return this.saveAssessment(destClassId, duplicatePayload);
+  }
+
+  /**
+   * Clear active context from localStorage
+   */
+  static clearActiveContext() {
+    localStorage.removeItem(this.STORAGE_KEY_ACTIVE);
+  }
+
+  /**
    * Save current active class ID and assessment ID context for crash recovery
    * @param {string} classId 
    * @param {string} assessmentId 

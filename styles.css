@@ -5,8 +5,6 @@
    With Dark Mode (Warm Night Study / Dark Walnut & Roasted Espresso)
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
-
 :root {
   /* Color Palette (Light Mode: Warm Oatmeal / Parchment Beige & Natural Clay) */
   --bg-primary: #f6f3eb;        /* Warm oatmeal paper canvas */
@@ -60,6 +58,7 @@
   --accent-improvement-text: #7b4507;
 
   /* Ambient Natural Shadows */
+  --shadow-xs: 0 1px 2px rgba(43, 37, 32, 0.04);
   --shadow-sm: 0 1px 3px rgba(43, 37, 32, 0.05);
   --shadow-md: 0 4px 10px -2px rgba(43, 37, 32, 0.07), 0 2px 4px -2px rgba(43, 37, 32, 0.04);
   --shadow-lg: 0 12px 24px -4px rgba(43, 37, 32, 0.08), 0 4px 8px -2px rgba(43, 37, 32, 0.03);
@@ -135,6 +134,7 @@ body[data-theme="dark"] {
   --accent-improvement-bg: #3a2811;
   --accent-improvement-text: #fad698;
 
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.25);
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.45);
   --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.55);
@@ -2115,3 +2115,534 @@ input[type="number"].config-num-input,
     justify-content: space-between;
   }
 }
+
+/* ==========================================================================
+   Refactored UI Enhancements: Toasts, Modals, Badges, Coverage & Breakdowns
+   ========================================================================== */
+
+/* Interactive Header Context Chip */
+button.header-context-chip {
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+button.header-context-chip:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--primary);
+  color: var(--text-main);
+}
+
+/* Wizard Step Badges */
+.step-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1rem 0.48rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: var(--radius-full);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+}
+
+.step-item.active .step-badge {
+  background: rgba(54, 100, 130, 0.14);
+  color: var(--primary-text);
+  border-color: rgba(54, 100, 130, 0.25);
+}
+
+.step-badge.badge-warning {
+  background: var(--warning-light) !important;
+  color: var(--warning-text) !important;
+  border-color: rgba(184, 115, 32, 0.35) !important;
+}
+
+/* Toast Notifications */
+.toast-container {
+  position: fixed;
+  bottom: 1.35rem;
+  right: 1.35rem;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-width: min(92vw, 400px);
+  pointer-events: none;
+}
+
+.toast-item {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-left: 4px solid var(--primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-main);
+  font-size: 0.85rem;
+  line-height: 1.45;
+  animation: toast-in 0.2s ease forwards;
+}
+
+.toast-item.toast-leaving {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.toast-item.toast-success {
+  border-left-color: var(--success);
+}
+.toast-item.toast-success .toast-icon {
+  color: var(--success);
+}
+
+.toast-item.toast-warning {
+  border-left-color: var(--warning);
+}
+.toast-item.toast-warning .toast-icon {
+  color: var(--warning);
+}
+
+.toast-item.toast-danger {
+  border-left-color: var(--danger);
+}
+.toast-item.toast-danger .toast-icon {
+  color: var(--danger);
+}
+
+.toast-item.toast-info .toast-icon {
+  color: var(--primary);
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.toast-message {
+  flex: 1;
+  font-weight: 500;
+}
+
+.toast-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.2rem;
+}
+
+.toast-close:hover {
+  color: var(--text-main);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Multi-Choice Modal Options */
+.choice-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.choice-modal-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 0.25rem;
+  padding: 0.85rem 1rem;
+  background: var(--bg-subtle);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  transition: all var(--transition-fast);
+  width: 100%;
+}
+
+.choice-modal-option:hover {
+  border-color: var(--primary);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.choice-modal-option-title {
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--text-main);
+}
+
+.choice-modal-option-desc {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Dashboard Empty State */
+.dashboard-empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 3rem 1.5rem;
+  background: var(--bg-subtle);
+  border-radius: var(--radius-lg);
+  border: 2px dashed var(--border-color);
+}
+
+/* Step 1: Gradebook Quick Preview Card */
+.gradebook-preview-card {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.15rem;
+  margin-top: 1rem;
+}
+
+.preview-stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.preview-stat-box {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.85rem;
+}
+
+.preview-stat-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.preview-stat-value {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-top: 0.15rem;
+}
+
+.mini-preview-table-wrap {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+
+/* Step 2: Question Structure Summary Bar */
+.structure-summary-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  margin-bottom: 1rem;
+}
+
+.summary-stats-group {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+}
+
+.section-breakdown-pills {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+/* Step 3: Question Coverage Banner */
+.coverage-banner {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.coverage-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.coverage-pills-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.coverage-q-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-sans);
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.coverage-q-pill:hover {
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.coverage-q-pill.status-full {
+  background: var(--success-light);
+  color: var(--success-text);
+  border-color: rgba(56, 115, 78, 0.35);
+}
+
+.coverage-q-pill.status-partial {
+  background: var(--warning-light);
+  color: var(--warning-text);
+  border-color: rgba(184, 115, 32, 0.38);
+}
+
+.coverage-q-pill.status-none {
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  border-style: dashed;
+}
+
+/* Step 3: Inline Comment Composer & In-Place Card Editing */
+.inline-comment-composer {
+  padding: 0.85rem 1rem;
+  background: var(--bg-surface-hover);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.composer-q-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.composer-q-pill {
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.73rem;
+  font-weight: 600;
+  padding: 0.16rem 0.5rem;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.composer-q-pill:hover {
+  border-color: var(--primary);
+  color: var(--text-main);
+}
+
+.composer-q-pill.selected {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+
+.comment-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.comment-card-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  width: 100%;
+}
+
+/* Step 4: Toolbar Groups, Filter Pills & Sort Controls */
+.step4-toolbar-groups {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.toolbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  padding: 0.3rem;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.filter-pills-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  background: var(--bg-subtle);
+  padding: 0.22rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.filter-pill-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.3rem 0.65rem;
+  border-radius: calc(var(--radius-md) - 2px);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.filter-pill-btn:hover {
+  color: var(--text-main);
+}
+
+.filter-pill-btn.active {
+  background: var(--primary);
+  color: #ffffff;
+}
+
+.sort-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+/* Step 4: Student Card Expandable Score Breakdown */
+.student-breakdown-toggle {
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.22rem 0.6rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  transition: all var(--transition-fast);
+}
+
+.student-breakdown-toggle:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-main);
+  border-color: var(--border-hover);
+}
+
+.student-breakdown-panel {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 0.85rem;
+  font-size: 0.8rem;
+}
+
+.breakdown-section-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.breakdown-section-row:last-child {
+  margin-bottom: 0;
+}
+
+.breakdown-sec-label {
+  font-weight: 700;
+  color: var(--text-main);
+  min-width: 90px;
+  padding-top: 0.15rem;
+}
+
+.breakdown-chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.breakdown-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+  background: var(--bg-surface);
+}
+
+.breakdown-chip.chip-mastered {
+  background: var(--success-light);
+  color: var(--success-text);
+  border-color: rgba(56, 115, 78, 0.3);
+}
+
+.breakdown-chip.chip-partial {
+  background: var(--warning-light);
+  color: var(--warning-text);
+  border-color: rgba(184, 115, 32, 0.35);
+}
+
+.breakdown-chip.chip-missed {
+  background: var(--danger-light);
+  color: var(--danger-text);
+  border-color: rgba(184, 58, 58, 0.3);
+}
+

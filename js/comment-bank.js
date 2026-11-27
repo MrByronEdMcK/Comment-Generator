@@ -57,6 +57,48 @@ class CommentBank {
     this.improvements = this.improvements.filter(i => i.id !== id);
   }
 
+  updateAchievement(id, updates = {}) {
+    const idx = this.achievements.findIndex(a => a.id === id);
+    if (idx === -1) return null;
+    const current = this.achievements[idx];
+    const qIds = Array.isArray(updates.questionIds)
+      ? updates.questionIds
+      : (updates.questionId !== undefined ? (updates.questionId ? [updates.questionId] : []) : (current.questionIds || []));
+    const tags = Array.isArray(updates.tags)
+      ? updates.tags
+      : (typeof updates.tags === 'string' ? updates.tags.split(',').map(t => t.trim()).filter(Boolean) : (current.tags || []));
+    this.achievements[idx] = {
+      ...current,
+      text: updates.text !== undefined ? updates.text.trim() : current.text,
+      questionIds: qIds,
+      questionId: qIds[0] || null,
+      tags,
+      section: updates.section !== undefined ? updates.section : current.section
+    };
+    return this.achievements[idx];
+  }
+
+  updateImprovement(id, updates = {}) {
+    const idx = this.improvements.findIndex(i => i.id === id);
+    if (idx === -1) return null;
+    const current = this.improvements[idx];
+    const qIds = Array.isArray(updates.questionIds)
+      ? updates.questionIds
+      : (updates.questionId !== undefined ? (updates.questionId ? [updates.questionId] : []) : (current.questionIds || []));
+    const tags = Array.isArray(updates.tags)
+      ? updates.tags
+      : (typeof updates.tags === 'string' ? updates.tags.split(',').map(t => t.trim()).filter(Boolean) : (current.tags || []));
+    this.improvements[idx] = {
+      ...current,
+      text: updates.text !== undefined ? updates.text.trim() : current.text,
+      questionIds: qIds,
+      questionId: qIds[0] || null,
+      tags,
+      section: updates.section !== undefined ? updates.section : current.section
+    };
+    return this.improvements[idx];
+  }
+
   clearSectionAchievements(section = null) {
     if (!section || section === 'General') {
       this.achievements = this.achievements.filter(a => a.section && a.section !== 'General');

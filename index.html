@@ -11,7 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Lora:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   
   <!-- Custom Design System Stylesheet -->
-  <link rel="stylesheet" href="styles.css?v=20261123c">
+  <link rel="stylesheet" href="styles.css?v=20261127">
 
   <!-- SheetJS Spreadsheet Parser -->
   <script src="vendor/xlsx.full.min.js"></script>
@@ -29,16 +29,18 @@
         </div>
         <div>
           <div class="brand-title">Comment Generator</div>
+          <div class="brand-subtitle">Assessment Feedback &amp; Compass Gradebook Automation</div>
         </div>
       </div>
 
       <!-- Header Actions: Context, Auto-Save Status & Theme Toggle -->
       <div class="header-actions">
-        <div id="headerContextChip" class="header-context-chip" style="display: none;">
+        <button type="button" id="headerContextChip" class="header-context-chip" style="display: none;" title="Click to switch Class or Assessment in the Manager Dashboard">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
           <span id="headerContextClass">Class</span>
           <span style="color: var(--text-light);">&bull;</span>
           <strong id="headerContextAssess">Assessment</strong>
-        </div>
+        </button>
 
         <div id="saveStatusIndicator" class="storage-status-chip">
           <span class="storage-dot"></span>
@@ -64,18 +66,22 @@
       <button type="button" class="step-item" data-step="1" style="display: none;">
         <span class="step-number">1</span>
         <span>Gradebook</span>
+        <span class="step-badge" id="stepBadge1" style="display: none;"></span>
       </button>
       <button type="button" class="step-item" data-step="2" style="display: none;">
         <span class="step-number">2</span>
         <span>Question Map</span>
+        <span class="step-badge" id="stepBadge2" style="display: none;"></span>
       </button>
       <button type="button" class="step-item" data-step="3" style="display: none;">
         <span class="step-number">3</span>
         <span>Comment Bank</span>
+        <span class="step-badge" id="stepBadge3" style="display: none;"></span>
       </button>
       <button type="button" class="step-item" data-step="4" style="display: none;">
         <span class="step-number">4</span>
         <span>Feedback Output</span>
+        <span class="step-badge" id="stepBadge4" style="display: none;"></span>
       </button>
     </nav>
 
@@ -91,8 +97,9 @@
                 <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color: var(--primary);">
                   <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
                 </svg>
-                Class & Assessment Manager
+                Class &amp; Assessment Manager
               </h2>
+              <p class="card-desc" style="margin-bottom: 0;">Organise your subject classes, assessments, gradebooks, and reusable comment banks.</p>
             </div>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
               <button id="btnExportAllData" class="btn btn-secondary btn-sm" title="Download backup of all classes and assessments">
@@ -122,7 +129,10 @@
       <section id="step1Panel" class="step-panel">
         <div class="card">
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
-            <h2 class="card-title" style="margin-bottom: 0;">1. Upload Graded Spreadsheet</h2>
+            <div>
+              <h2 class="card-title" style="margin-bottom: 0;">1. Upload Graded Spreadsheet</h2>
+              <p class="card-desc" style="margin-bottom: 0;">Upload your Excel (.xlsx, .xls) or CSV gradebook containing student names and question scores.</p>
+            </div>
             <a href="Template.xlsx" download="Template.xlsx" id="btnDownloadTemplate" class="btn btn-secondary btn-sm" title="Download a blank gradebook template matching the expected import format">
               <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
               <span>Download Template (.xlsx)</span>
@@ -154,6 +164,9 @@
             </div>
           </div>
 
+          <!-- Gradebook Summary & Student Preview -->
+          <div id="gradebookPreviewCard" class="gradebook-preview-card" style="display: none;"></div>
+
           <div class="nav-actions">
             <button class="btn btn-secondary btn-back" data-target="0">&larr; Back to Dashboard</button>
             <button id="btnGotoStep2" class="btn btn-primary" disabled>
@@ -166,7 +179,25 @@
       <!-- STEP 2: REVIEW & EDIT QUESTIONS -->
       <section id="step2Panel" class="step-panel">
         <div class="card">
-          <h2 class="card-title">2. Question Structure & Mark Allocations</h2>
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1rem;">
+            <div>
+              <h2 class="card-title">2. Question Structure &amp; Mark Allocations</h2>
+              <p class="card-desc" style="margin-bottom: 0;">Verify detected question IDs and max marks, or insert section breaks (e.g., MCQ, SAQ, Extended Response) to group questions.</p>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button id="btnAddQuestion" class="btn btn-secondary btn-sm">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"></path></svg>
+                <span>Add Question</span>
+              </button>
+              <button id="btnAddSectionBreak" class="btn btn-primary btn-sm">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
+                <span>Add Section Break</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Assessment Structure & Section Totals Summary Bar -->
+          <div id="questionStructureSummaryBar" class="structure-summary-bar" style="display: none;"></div>
 
           <div class="table-container">
             <table class="data-table" id="questionsTable">
@@ -176,26 +207,15 @@
                   <th>Column Header</th>
                   <th>Question ID</th>
                   <th style="width: 110px;">Max Marks</th>
-                  <th style="width: 120px;">Subquestion</th>
-                  <th style="width: 90px;">Include</th>
-                  <th style="width: 110px;">Actions</th>
+                  <th style="width: 120px; text-align: center;">Subquestion</th>
+                  <th style="width: 90px; text-align: center;">Include</th>
+                  <th style="width: 170px;">Actions</th>
                 </tr>
               </thead>
               <tbody id="questionsTableBody">
                 <!-- Dynamically populated -->
               </tbody>
             </table>
-          </div>
-
-          <div style="display: flex; gap: 0.5rem; margin-top: 0.85rem; flex-wrap: wrap;">
-            <button id="btnAddQuestion" class="btn btn-secondary btn-sm">
-              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"></path></svg>
-              <span>Add Question</span>
-            </button>
-            <button id="btnAddSectionBreak" class="btn btn-secondary btn-sm">
-              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
-              <span>Add Section Break</span>
-            </button>
           </div>
 
           <div class="nav-actions">
@@ -211,12 +231,24 @@
       <section id="step3Panel" class="step-panel">
         <div class="card">
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
-            <h2 class="card-title" style="margin-bottom: 0;">3. Comment Bank</h2>
-            <div class="priority-mode-segmented" role="group" aria-label="Comment Bank Method">
-              <button type="button" class="priority-mode-btn active" id="btnBankModeQuestion" data-bank-mode="question">Comment per Question</button>
-              <button type="button" class="priority-mode-btn" id="btnBankModeOutcome" data-bank-mode="outcome">Comment per Outcome</button>
+            <div>
+              <h2 class="card-title" style="margin-bottom: 0;">3. Comment Bank</h2>
+              <p class="card-desc" style="margin-bottom: 0;">Create or import Achievement and Improvement comments linked to questions, sections, or learning outcomes.</p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <button type="button" id="btnCopyBankFromAssessment" class="btn btn-secondary btn-sm" title="Copy comment bank or outcomes from another assessment">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path></svg>
+                <span>Copy from Assessment</span>
+              </button>
+              <div class="priority-mode-segmented" role="group" aria-label="Comment Bank Method">
+                <button type="button" class="priority-mode-btn active" id="btnBankModeQuestion" data-bank-mode="question">Comment per Question</button>
+                <button type="button" class="priority-mode-btn" id="btnBankModeOutcome" data-bank-mode="outcome">Comment per Outcome</button>
+              </div>
             </div>
           </div>
+
+          <!-- Question Coverage Indicator Strip -->
+          <div id="questionCoverageBanner" class="coverage-banner" style="display: none;"></div>
 
           <div id="questionBankContainer">
             <!-- Section Switcher Tabs -->
@@ -254,10 +286,12 @@
                   </span>
                   <div style="display: flex; gap: 0.35rem;">
                     <button id="btnBulkPasteAchieve" class="btn btn-secondary btn-sm">Bulk Paste</button>
-                    <button id="btnAddAchievement" class="btn btn-secondary btn-sm">+ Add</button>
+                    <button id="btnAddAchievement" class="btn btn-primary btn-sm">+ Add</button>
                     <button id="btnClearSectionAchieve" class="btn btn-secondary btn-sm" title="Clear achievements for active section">Clear</button>
                   </div>
                 </div>
+                <!-- Inline Quick Composer for Achievements -->
+                <div id="achieveComposer" class="inline-comment-composer" style="display: none;"></div>
                 <div class="comment-list" id="achievementsList">
                   <!-- Dynamically populated -->
                 </div>
@@ -272,10 +306,12 @@
                   </span>
                   <div style="display: flex; gap: 0.35rem;">
                     <button id="btnBulkPasteImprove" class="btn btn-secondary btn-sm">Bulk Paste</button>
-                    <button id="btnAddImprovement" class="btn btn-secondary btn-sm">+ Add</button>
+                    <button id="btnAddImprovement" class="btn btn-primary btn-sm">+ Add</button>
                     <button id="btnClearSectionImprove" class="btn btn-secondary btn-sm" title="Clear improvements for active section">Clear</button>
                   </div>
                 </div>
+                <!-- Inline Quick Composer for Improvements -->
+                <div id="improveComposer" class="inline-comment-composer" style="display: none;"></div>
                 <div class="comment-list" id="improvementsList">
                   <!-- Dynamically populated -->
                 </div>
@@ -334,26 +370,33 @@
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
             <div>
               <h2 class="card-title">4. Student Feedback Comments</h2>
+              <p class="card-desc" style="margin-bottom: 0;">Generate, inspect, and refine student feedback comments before exporting to Excel or Compass.</p>
             </div>
-            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-              <button id="btnGenerateAll" class="btn btn-primary">
-                Generate All Comments
-              </button>
-              <button id="btnGenerateMissing" class="btn btn-success">
-                Generate Missing
-              </button>
-              <button id="btnClearAllComments" class="btn btn-danger">
-                Clear Comments
-              </button>
-              <button id="btnExportExcel" class="btn btn-secondary">
-                Export to Excel (.xlsx)
-              </button>
-              <button id="btnCopyCompassScript" class="btn btn-secondary" title="Generate and copy automated console command for Compass">
-                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                </svg>
-                <span>Copy Compass Script</span>
-              </button>
+            <div class="step4-toolbar-groups">
+              <div class="toolbar-group" role="group" aria-label="Generation Actions">
+                <button id="btnGenerateAll" class="btn btn-primary">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                  <span>Generate All</span>
+                </button>
+                <button id="btnGenerateMissing" class="btn btn-success" title="Generate comments only for students with blank comments">
+                  <span>Generate Missing</span>
+                </button>
+                <button id="btnClearAllComments" class="btn btn-danger" title="Clear all generated comments">
+                  <span>Clear All</span>
+                </button>
+              </div>
+              <div class="toolbar-group" role="group" aria-label="Export Actions">
+                <button id="btnExportExcel" class="btn btn-secondary">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                  <span>Export Excel (.xlsx)</span>
+                </button>
+                <button id="btnCopyCompassScript" class="btn btn-secondary" title="Generate and copy automated console command for Compass">
+                  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                  </svg>
+                  <span>Copy Compass Script</span>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -367,8 +410,8 @@
                   </svg>
                 </div>
                 <div>
-                  <div style="display: flex; align-items: center; gap: 0.5rem;">
-                    <h3 class="config-main-title">Generation & Section Priority Settings</h3>
+                  <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                    <h3 class="config-main-title">Generation &amp; Section Priority Settings</h3>
                     <span id="configSummaryBadge" class="config-box-badge" style="display: none;"></span>
                   </div>
                 </div>
@@ -567,7 +610,7 @@
                     </div>
                   </div>
 
-                  <!-- Section Priority Board (Tiles in Rows with Drag Above/Below Dropzones - hidden when toggle is off) -->
+                  <!-- Section Priority Board -->
                   <div id="sectionPriorityBoardContainer" style="display: none; margin-top: 0.75rem;">
                     <div id="sectionPriorityBoard" class="section-priority-board">
                       <!-- Populated dynamically: tier rows with tiles and drag zones -->
@@ -580,7 +623,6 @@
                   Prioritises hardest questions mastered (lowest class %) for strengths and easiest missed questions (highest class %) for growth.
                 </div>
               </div>
-            </div>
             </div>
           </div>
 
@@ -612,11 +654,30 @@
             </div>
           </div>
 
-          <!-- Filter & Search Controls -->
+          <!-- Filter, Status Pills & Sort Controls -->
           <div class="dashboard-controls">
-            <input type="text" id="searchStudent" class="form-control search-input" placeholder="Search student name...">
-            <div style="font-size: 0.86rem; color: var(--text-muted);">
-              Total Students: <strong id="totalStudentsCount" style="color: var(--text-main);">0</strong>
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; flex: 1;">
+              <input type="text" id="searchStudent" class="form-control search-input" placeholder="Search student name...">
+              <div id="studentFilterPills" class="filter-pills-group" role="group" aria-label="Filter students by comment status">
+                <button type="button" class="filter-pill-btn active" data-filter="all">All (<span id="countFilterAll">0</span>)</button>
+                <button type="button" class="filter-pill-btn" data-filter="complete">Complete (<span id="countFilterComplete">0</span>)</button>
+                <button type="button" class="filter-pill-btn" data-filter="review">Needs Review (<span id="countFilterReview">0</span>)</button>
+                <button type="button" class="filter-pill-btn" data-filter="absent">Absent (<span id="countFilterAbsent">0</span>)</button>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+              <div class="sort-select-wrap">
+                <label for="sortStudentSelect" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); white-space: nowrap;">Sort by:</label>
+                <select id="sortStudentSelect" style="width: auto; min-width: 175px; padding: 0.4rem 0.65rem; font-size: 0.82rem;">
+                  <option value="order">Spreadsheet Order</option>
+                  <option value="name_asc">Name (A &ndash; Z)</option>
+                  <option value="score_desc">Score (High &rarr; Low)</option>
+                  <option value="score_asc">Score (Low &rarr; High)</option>
+                </select>
+              </div>
+              <div style="font-size: 0.84rem; color: var(--text-muted); white-space: nowrap;">
+                Showing <strong id="totalStudentsCount" style="color: var(--text-main);">0</strong>
+              </div>
             </div>
           </div>
 
@@ -648,13 +709,13 @@
       <div class="modal-body">
         <div style="margin-bottom: 0.85rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
           <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">Section:</label>
+            <label for="bulkSectionSelect" style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">Section:</label>
             <select id="bulkSectionSelect" style="max-width: 180px;">
               <option value="General">General Comments</option>
             </select>
           </div>
           <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">Category:</label>
+            <label for="bulkCategorySelect" style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">Category:</label>
             <select id="bulkCategorySelect" style="max-width: 220px;">
               <option value="achievements">Achievements (Strengths)</option>
               <option value="improvements">Improvements (Growth Areas)</option>
@@ -686,7 +747,7 @@
       <div class="modal-body">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.75rem;">
           <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">Column Mapping:</label>
+            <label for="compassColumnFormat" style="font-size: 0.85rem; font-weight: 600; color: var(--text-main);">Column Mapping:</label>
             <select id="compassColumnFormat" style="max-width: 340px; font-size: 0.85rem;">
               <option value="band_ach_imp">Grade Band, Achievements, Improvements (3 cols)</option>
               <option value="ach_imp">Achievements, Improvements (2 cols)</option>
@@ -771,11 +832,13 @@
     </div>
   </div>
 
-  <!-- Application Logic -->
-  <script src="js/storage-service.js?v=20261123c"></script>
-  <script src="js/excel-parser.js?v=20261123c"></script>
-  <script src="js/comment-engine.js?v=20261123c"></script>
-  <script src="js/comment-bank.js?v=20261123c"></script>
-  <script src="app.js?v=20261123c"></script>
+  <!-- Application Logic Modules -->
+  <script src="js/ui-helpers.js?v=20261127"></script>
+  <script src="js/storage-service.js?v=20261127"></script>
+  <script src="js/excel-parser.js?v=20261127"></script>
+  <script src="js/comment-engine.js?v=20261127"></script>
+  <script src="js/comment-bank.js?v=20261127"></script>
+  <script src="js/compass-exporter.js?v=20261127"></script>
+  <script src="app.js?v=20261127"></script>
 </body>
 </html>

@@ -264,10 +264,12 @@ class CommentEngine {
       }
     }
 
-    // Comma or whitespace-separated parts
-    const parts = clean.split(/[,;\s]+/).map(p => p.trim()).filter(Boolean);
+    // Comma, 'and', '&', or whitespace-separated parts
+    const parts = clean.split(/(?:[,;]\s*|\s+and\s+|\s*&\s*|\s+)/i).map(p => p.trim()).filter(Boolean);
 
     for (const part of parts) {
+      if (/^(and|or|to|&)$/i.test(part)) continue;
+
       const fullSubMatch = part.match(/^(?:Q\s*)?(\d+)([a-z][a-z0-9]*)$/i);
       if (fullSubMatch) {
         currentBaseNum = fullSubMatch[1];
@@ -426,6 +428,7 @@ class CommentEngine {
 
     let sheetTotal = null;
     let sheetPct = null;
+    let rawSheetPctVal = null;
 
     for (const [key, val] of Object.entries(rawScores)) {
       const lowerKey = key.toLowerCase();
@@ -438,6 +441,7 @@ class CommentEngine {
         }
       }
       if (lowerKey === 'percentage' || lowerKey.startsWith('percentage_') || lowerKey === '%' || lowerKey.includes('percent')) {
+        rawSheetPctVal = val;
         if (typeof val === 'string' && val.includes('%')) {
           const parsed = parseFloat(val.replace('%', '').trim());
           if (!isNaN(parsed)) sheetPct = Math.round(parsed);
@@ -469,18 +473,29 @@ class CommentEngine {
     }
 
     let totalMax = calculatedMax;
-    if (totalMax === 0 && sheetTotal !== null && sheetPct !== null && sheetPct > 0) {
-      totalMax = Math.round((sheetTotal / (sheetPct / 100)));
-    }
-    if (totalMax === 0 && sheetTotal !== null && sheetTotal > 0) {
-      totalMax = sheetTotal;
+    if (isZeroOutOfZero) {
+      totalMax = 0;
+    } else if (sheetPct !== null && sheetPct > 0 && totalObtained > 0) {
+      if (typeof rawSheetPctVal === 'number' && rawSheetPctVal > 0 && rawSheetPctVal <= 1.0) {
+        const exactMax = Math.round(totalObtained / rawSheetPctVal);
+        if (exactMax > 0 && Math.abs((totalObtained / exactMax) - rawSheetPctVal) < 0.01) {
+          totalMax = exactMax;
+        } else {
+          totalMax = Math.round(totalObtained / (sheetPct / 100));
+        }
+      } else if (calculatedMax === 0 || Math.round((totalObtained / calculatedMax) * 100) !== sheetPct) {
+        totalMax = Math.round(totalObtained / (sheetPct / 100));
+      }
+    } else if (totalMax === 0 && totalObtained > 0) {
+      totalMax = Math.round(totalObtained);
     }
 
+    const cleanNum = (n) => Number.isInteger(n) ? n : Math.round(n * 100) / 100;
     const band = isZeroOutOfZero ? 'Incomplete' : CommentEngine.getAchievementBand(percentage);
 
     return {
-      obtained: totalObtained,
-      max: totalMax,
+      obtained: cleanNum(totalObtained),
+      max: cleanNum(totalMax),
       percentage,
       band,
       isZeroOutOfZero
@@ -515,23 +530,30 @@ class CommentEngine {
    * When enabled (enableScoreTiers = true): uses performance tiers and customizable thresholds.
    */
   static getTargetDistribution(pct, config = {}) {
-    if (!config.enableScoreTiers) {
-      // By default: uniform comment count (default: 6 -> 3/3 split) with no difference for higher/mid/lower scores
-      const total = parseInt(config.totalComments, 10) || 6;
+    if (config.enableScoreTiers === false) {
+      const total = Math.max(1, parseInt(config.totalComments, 10) || 6);
       const targetAch = Math.max(1, Math.ceil(total / 2));
       const targetImp = Math.max(1, total - targetAch);
       return { targetAch, targetImp, total: targetAch + targetImp };
     }
 
-    const total = parseInt(config.totalComments, 10) || 6;
+    let total = Math.max(1, parseInt(config.totalComments, 10) || 6);
     const parsedMinAch = parseInt(config.minAchievements, 10);
     const parsedMaxAch = parseInt(config.maxAchievements, 10);
     const parsedMinImp = parseInt(config.minImprovements, 10);
     const parsedMaxImp = parseInt(config.maxImprovements, 10);
-    const minAch = !isNaN(parsedMinAch) ? parsedMinAch : 1;
-    const maxAch = !isNaN(parsedMaxAch) ? parsedMaxAch : 4;
-    const minImp = !isNaN(parsedMinImp) ? parsedMinImp : 1;
-    const maxImp = !isNaN(parsedMaxImp) ? parsedMaxImp : 4;
+    const minAch = (!isNaN(parsedMinAch) && parsedMinAch >= 0) ? parsedMinAch : 1;
+    let maxAch = (!isNaN(parsedMaxAch) && parsedMaxAch >= minAch) ? parsedMaxAch : Math.max(minAch, 4);
+    const minImp = (!isNaN(parsedMinImp) && parsedMinImp >= 0) ? parsedMinImp : 1;
+    let maxImp = (!isNaN(parsedMaxImp) && parsedMaxImp >= minImp) ? parsedMaxImp : Math.max(minImp, 4);
+
+    if (minAch + minImp > total) {
+      total = minAch + minImp;
+    }
+    if (maxAch + maxImp < total) {
+      maxAch = Math.max(maxAch, total - minImp);
+      maxImp = Math.max(maxImp, total - minAch);
+    }
 
     const highThreshold = config.highThreshold !== undefined && !isNaN(parseInt(config.highThreshold, 10))
       ? parseInt(config.highThreshold, 10)
@@ -540,17 +562,53 @@ class CommentEngine {
       ? parseInt(config.midThreshold, 10)
       : 50;
 
+    const numPct = !isNaN(Number(pct)) ? Number(pct) : 50;
     let targetAch;
-    if (pct >= highThreshold) {
-      targetAch = Math.min(maxAch, total - minImp);
-    } else if (pct < midThreshold) {
-      targetAch = Math.max(minAch, total - maxImp);
-    } else {
-      targetAch = Math.round(total / 2);
-    }
+    let targetImp;
 
-    targetAch = Math.max(minAch, Math.min(maxAch, targetAch));
-    const targetImp = Math.max(minImp, Math.min(maxImp, total - targetAch));
+    if (numPct >= highThreshold) {
+      targetAch = Math.min(maxAch, total - minImp);
+      targetImp = total - targetAch;
+      if (targetImp < minImp) {
+        targetImp = minImp;
+        targetAch = total - targetImp;
+      }
+      if (targetImp > maxImp) {
+        targetImp = maxImp;
+        targetAch = total - targetImp;
+      }
+    } else if (numPct < midThreshold) {
+      targetImp = Math.min(maxImp, total - minAch);
+      targetAch = total - targetImp;
+      if (targetAch < minAch) {
+        targetAch = minAch;
+        targetImp = total - targetAch;
+      }
+      if (targetAch > maxAch) {
+        targetAch = maxAch;
+        targetImp = total - targetAch;
+      }
+    } else {
+      const half = total / 2;
+      targetAch = numPct >= (highThreshold + midThreshold) / 2 ? Math.ceil(half) : Math.floor(half);
+      targetImp = total - targetAch;
+
+      if (targetAch < minAch) {
+        targetAch = minAch;
+        targetImp = total - targetAch;
+      } else if (targetAch > maxAch) {
+        targetAch = maxAch;
+        targetImp = total - targetAch;
+      }
+
+      if (targetImp < minImp) {
+        targetImp = minImp;
+        targetAch = total - targetImp;
+      } else if (targetImp > maxImp) {
+        targetImp = maxImp;
+        targetAch = total - targetImp;
+      }
+    }
 
     return { targetAch, targetImp, total: targetAch + targetImp };
   }
@@ -1441,6 +1499,171 @@ class CommentEngine {
     });
 
     return results;
+  }
+
+  /**
+   * Compute question & section coverage statistics for Step 2 and Step 3 UI.
+   * Shows which included questions have Achievement and Improvement comments mapped.
+   */
+  static calculateQuestionCoverage(questions = [], commentBank = null, outcomes = [], mode = 'question') {
+    const validQuestions = (questions || []).filter(
+      q => !q.isSectionBreak && !q.isTotal && !q.isPercentage && !q.isSummary && !q.isPenalty && q.included !== false
+    );
+
+    const sectionBreakdown = {};
+    let totalMaxMarks = 0;
+
+    validQuestions.forEach(q => {
+      const sec = q.section || 'General';
+      const marks = parseFloat(q.maxMarks) || 0;
+      totalMaxMarks += marks;
+      if (!sectionBreakdown[sec]) {
+        sectionBreakdown[sec] = { section: sec, questionCount: 0, totalMarks: 0 };
+      }
+      sectionBreakdown[sec].questionCount += 1;
+      sectionBreakdown[sec].totalMarks = Math.round((sectionBreakdown[sec].totalMarks + marks) * 100) / 100;
+    });
+
+    const parsedAch = ((commentBank && commentBank.achievements) || []).map(CommentEngine.parseCommentEntry);
+    const parsedImp = ((commentBank && commentBank.improvements) || []).map(CommentEngine.parseCommentEntry);
+
+    const questionCoverage = validQuestions.map(q => {
+      const qKey = CommentEngine.getQuestionKey(q);
+      const qId = q.id || q.title || '';
+      const qSec = q.section || 'General';
+      let achCount = 0;
+      let impCount = 0;
+
+      if (mode === 'outcome') {
+        (outcomes || []).forEach(o => {
+          const keys = Array.isArray(o.questionKeys) ? o.questionKeys : [];
+          if (keys.includes(qKey)) {
+            if ((o.achievement || '').trim()) achCount++;
+            if ((o.improvement || '').trim()) impCount++;
+          }
+        });
+      } else {
+        parsedAch.forEach(a => {
+          if (Array.isArray(a.questionIds) && a.questionIds.length > 0) {
+            if (
+              CommentEngine.isSectionMatch(a.section, qSec, true) &&
+              a.questionIds.some(cid => CommentEngine.isQuestionMatch(cid, qId))
+            ) {
+              achCount++;
+            }
+          }
+        });
+        parsedImp.forEach(i => {
+          if (Array.isArray(i.questionIds) && i.questionIds.length > 0) {
+            if (
+              CommentEngine.isSectionMatch(i.section, qSec, true) &&
+              i.questionIds.some(cid => CommentEngine.isQuestionMatch(cid, qId))
+            ) {
+              impCount++;
+            }
+          }
+        });
+      }
+
+      const status = (achCount > 0 && impCount > 0)
+        ? 'full'
+        : ((achCount > 0 || impCount > 0) ? 'partial' : 'none');
+
+      return {
+        key: qKey,
+        id: qId,
+        section: qSec,
+        maxMarks: parseFloat(q.maxMarks) || 0,
+        achCount,
+        impCount,
+        status
+      };
+    });
+
+    const fullyCoveredCount = questionCoverage.filter(c => c.status === 'full').length;
+    const partialCoveredCount = questionCoverage.filter(c => c.status === 'partial').length;
+    const uncoveredCount = questionCoverage.filter(c => c.status === 'none').length;
+
+    return {
+      totalQuestions: validQuestions.length,
+      totalMaxMarks: Math.round(totalMaxMarks * 100) / 100,
+      sectionBreakdown: Object.values(sectionBreakdown),
+      questionCoverage,
+      fullyCoveredCount,
+      partialCoveredCount,
+      uncoveredCount
+    };
+  }
+
+  /**
+   * Extract Achievements, Improvements, and Full combined comment sections from raw comment text.
+   */
+  static extractFeedbackSections(rawText) {
+    if (!rawText) return { achievements: '', improvements: '', full: '' };
+    const text = String(rawText).trim();
+
+    const achMatch = text.match(/Achievements:\s*([\s\S]*?)(?=(?:Improvements:|$))/i);
+    const impMatch = text.match(/Improvements:\s*([\s\S]*?)$/i);
+
+    let achievements = achMatch ? achMatch[1].trim() : '';
+    let improvements = impMatch ? impMatch[1].trim() : '';
+
+    if (!achMatch && !impMatch) {
+      achievements = text;
+      improvements = '';
+    }
+
+    if (achievements.toLowerCase().includes('(none qualified from bank)')) {
+      achievements = '';
+    }
+    if (improvements.toLowerCase().includes('(none qualified from bank)')) {
+      improvements = '';
+    }
+
+    function formatSectionSentences(raw) {
+      if (!raw || !raw.trim()) return '';
+
+      const rawLines = raw.split(/\r?\n+/).map(l => l.trim()).filter(Boolean);
+      const validLines = rawLines.filter(l =>
+        !/^achievements:\s*$/i.test(l) &&
+        !/^improvements:\s*$/i.test(l) &&
+        !/\(none qualified from bank\)/i.test(l) &&
+        !/\[Missing (?:Achievement|Improvement)\s*\d*\]/i.test(l)
+      );
+
+      let sentences = [];
+      if (validLines.length > 1) {
+        sentences = validLines;
+      } else if (validLines.length === 1) {
+        const single = validLines[0];
+        const matched = single.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g);
+        if (matched && matched.length > 1) {
+          sentences = matched.map(s => s.trim()).filter(Boolean);
+        } else {
+          sentences = [single];
+        }
+      }
+
+      return sentences
+        .map(s => {
+          const cleaned = s.replace(/\s+/g, ' ').trim();
+          return /[.!?]$/.test(cleaned) ? cleaned : cleaned + '.';
+        })
+        .filter(Boolean)
+        .join('\n');
+    }
+
+    achievements = formatSectionSentences(achievements);
+    improvements = formatSectionSentences(improvements);
+
+    const fullRaw = text
+      .replace(/Achievements:\s*/gi, '')
+      .replace(/Improvements:\s*/gi, '')
+      .replace(/\(None qualified from bank\)/gi, '')
+      .trim();
+    const full = formatSectionSentences(fullRaw);
+
+    return { achievements, improvements, full };
   }
 }
 
